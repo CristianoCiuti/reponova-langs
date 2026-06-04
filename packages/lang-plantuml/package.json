@@ -1,7 +1,23 @@
 {
   "name": "@reponova/lang-plantuml",
   "version": "0.2.0",
-  "description": "PlantUML support for RepoNova",
+  "description": "PlantUML diagram support for RepoNova",
+  "keywords": [
+    "reponova",
+    "reponova-plugin",
+    "language-plugin",
+    "plantuml",
+    "puml",
+    "uml",
+    "diagram",
+    "class-diagram",
+    "sequence-diagram",
+    "state-diagram",
+    "component-diagram",
+    "c4-diagram",
+    "knowledge-graph",
+    "static-analysis"
+  ],
   "type": "module",
   "exports": {
     ".": "./dist/index.js"

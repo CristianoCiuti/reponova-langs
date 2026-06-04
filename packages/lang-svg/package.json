@@ -1,7 +1,19 @@
 {
   "name": "@reponova/lang-svg",
   "version": "0.2.0",
-  "description": "SVG diagram support for RepoNova",
+  "description": "SVG asset support for RepoNova",
+  "keywords": [
+    "reponova",
+    "reponova-plugin",
+    "language-plugin",
+    "svg",
+    "diagram",
+    "vector-graphics",
+    "icon",
+    "asset",
+    "knowledge-graph",
+    "static-analysis"
+  ],
   "type": "module",
   "exports": {
     ".": "./dist/index.js"

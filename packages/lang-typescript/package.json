@@ -2,6 +2,21 @@
   "name": "@reponova/lang-typescript",
   "version": "0.0.0",
   "description": "TypeScript language support for RepoNova",
+  "keywords": [
+    "reponova",
+    "reponova-plugin",
+    "language-plugin",
+    "typescript",
+    "ts",
+    "tree-sitter",
+    "tree-sitter-typescript",
+    "ast",
+    "code-analysis",
+    "knowledge-graph",
+    "static-analysis",
+    "outline",
+    "symbol-extraction"
+  ],
   "type": "module",
   "exports": {
     ".": "./dist/index.js"

@@ -8,71 +8,32 @@ Each plugin extends RepoNova's knowledge graph with support for a specific langu
 
 | Package | Description | Status |
 |---|---|---|
-| [`@reponova/lang-python`](./packages/lang-python) | Python (tree-sitter) | Published |
-| [`@reponova/lang-plantuml`](./packages/lang-plantuml) | PlantUML diagrams (regex) | Published |
-| [`@reponova/lang-svg`](./packages/lang-svg) | SVG assets (regex) | Published |
+| [`@reponova/lang-typescript`](./packages/lang-typescript) | TypeScript (`.ts` / `.mts` / `.cts`, tree-sitter) | Published |
+| [`@reponova/lang-python`](./packages/lang-python) | Python (`.py` / `.pyw`, tree-sitter) | Published |
+| [`@reponova/lang-plantuml`](./packages/lang-plantuml) | PlantUML diagrams (`.puml` / `.plantuml`, regex) | Published |
+| [`@reponova/lang-svg`](./packages/lang-svg) | SVG assets (`.svg`, regex) | Published |
 
-Internal (not published):
-
-| Package | Description |
-|---|---|
-| `@reponova/lang-test-utils` | Shared test helpers |
-| `@reponova/scaffold` | Plugin scaffolding CLI |
-
-## Development
-
-Requirements: Node `>=18`, pnpm `9`.
+## Install a plugin in your RepoNova project
 
 ```bash
-pnpm install
-pnpm grammar-fetch    # download tree-sitter .wasm grammars (one-time per clone / per bump)
-pnpm typecheck
-pnpm build
-pnpm test
+reponova lang add @reponova/lang-typescript
+reponova lang add @reponova/lang-python
+reponova lang add @reponova/lang-plantuml
+reponova lang add @reponova/lang-svg
 ```
 
-The `prebuild` and `pretest` hooks of plugins that ship a grammar (e.g. `lang-python`) call `grammar-fetch` automatically, so running `pnpm build` or `pnpm test` from a fresh clone also works without an explicit fetch step.
-
-### Grammars
-
-Tree-sitter `.wasm` grammars are **not committed to git**. They are pinned (version + SHA-256) in [`tools/grammar-fetcher/grammars.json`](./tools/grammar-fetcher/grammars.json), downloaded from upstream GitHub releases at build time, and bundled into each plugin's published npm tarball under `grammars/`.
-
-See [`tools/grammar-fetcher/README.md`](./tools/grammar-fetcher/README.md) for adding or bumping a grammar.
-
-### npm Trusted Publisher (OIDC)
-
-Each `@reponova/lang-*` package on npmjs.com is configured with a GitHub Actions OIDC Trusted Publisher pointing at `release.yml` in this repo. There are no long-lived `NPM_TOKEN` secrets in CI.
-
-For a brand-new plugin, the first publish requires a one-time bootstrap (npm has a chicken-and-egg between Trusted Publisher and OIDC publishing). The `bootstrap-plugin` helper combines both steps in a single guided flow:
-
-```bash
-pnpm bootstrap-plugin lang-<id>   # publish + configure trust, ~90s
-```
-
-After this runs once, every subsequent release is fully automated via CI.
-
-For details and the operational procedure, see [`tools/bootstrap-plugin/README.md`](./tools/bootstrap-plugin/README.md) and [`tools/trust-configure/README.md`](./tools/trust-configure/README.md).
-
-### Scaffold a new plugin
-
-```bash
-pnpm scaffold lang-<id>
-```
-
-### Release
-
-Releases are managed via [Changesets](https://github.com/changesets/changesets).
-
-```bash
-pnpm changeset           # describe a change
-pnpm version-packages    # apply version bumps locally
-# push to `main` -> GitHub Actions publishes via changesets/action
-```
+Each plugin's README documents what it extracts and the available `reponova.yml` configuration.
 
 ## Architecture
 
-Plugins are independent npm packages conforming to the `LanguagePlugin` interface defined in [reponova](https://github.com/CristianoCiuti/reponova).
+Every plugin is an independent npm package conforming to the `LanguagePlugin` contract defined by [reponova](https://github.com/CristianoCiuti/reponova). A plugin declares its file extensions, optionally ships a tree-sitter `.wasm` grammar bundled inside the published tarball, and exposes an `extractor` that returns symbols, imports, and references for each parsed file.
+
+Tree-sitter grammars are pinned by version and SHA-256, downloaded at build time, and re-distributed as part of each plugin's published artefact — consumers never need to manage grammar binaries themselves.
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the developer setup, the grammar workflow, the npm trusted-publisher procedure, and the release process.
 
 ## License
 
-MIT. See [LICENSE](./LICENSE).
+MIT — see [LICENSE](./LICENSE).

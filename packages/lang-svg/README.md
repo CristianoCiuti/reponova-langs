@@ -1,6 +1,6 @@
 # @reponova/lang-svg
 
-SVG diagram support for [RepoNova](https://github.com/CristianoCiuti/reponova).
+SVG asset support for [RepoNova](https://github.com/CristianoCiuti/reponova). Regex-based parser — no tree-sitter grammar required.
 
 ## Install
 
@@ -8,11 +8,13 @@ SVG diagram support for [RepoNova](https://github.com/CristianoCiuti/reponova).
 reponova lang add @reponova/lang-svg
 ```
 
-## What it provides
+## What it extracts
 
-- **SVG** (`.svg`): Extracts text elements from SVG XML
+- **File docstring**: the first `<title>` element (typically the diagram title).
+- **Symbols**: up to 20 unique meaningful labels found in `<text>` elements (sanitised into graph-friendly names). Each symbol carries the original label as its docstring.
+- **File node kind**: `diagram` with the `svg` tag.
 
-No tree-sitter grammar required — parsing is regex-based.
+Useful for tracking design assets, hand-authored diagrams (Inkscape, Excalidraw), icon libraries, and rendered Mermaid / PlantUML output.
 
 ## Extensions
 
@@ -38,10 +40,12 @@ plugins:
 | `patterns` | string[] | `[]` | Glob patterns to override global file matching for this plugin |
 | `exclude` | string[] | `[]` | Glob patterns to override global exclusions for this plugin |
 
-## Test fixtures
+## Resolution semantics
 
-The package ships three tiers of test fixtures, in line with section 8.7 of the workspace integration plan:
+- Symbols are derived from `<text>` element content. Numeric-only labels (e.g. axis ticks) and labels shorter than 3 / longer than 80 characters are filtered out.
+- Names are sanitised: non-`[a-zA-Z0-9_\s-]` characters are stripped, runs of whitespace collapse to `_`, the result is truncated to 60 characters. Original labels are preserved verbatim in `docstring`.
+- The plugin imposes a 20-symbol-per-file cap to keep large iconographic SVGs from dominating the graph.
 
-- **`tests/fixtures/simple/layout.svg`** — a 3-tier layout SVG with three labelled boxes.
-- **`tests/fixtures/medium/dashboard.svg`** — a richer "Operations Dashboard" mock with gradients, filters, patterns, and ~10 distinct text labels.
-- **`tests/fixtures/complex/simple-icons-16.22.0/`** — a 75-icon, ~97 KB curated subset of [`simple-icons/simple-icons`](https://github.com/simple-icons/simple-icons), pinned at `16.22.0`, CC0-1.0 (public domain). Provenance and per-file SHA-256 hashes are recorded in [`ATTRIBUTION.md`](./tests/fixtures/complex/simple-icons-16.22.0/ATTRIBUTION.md). Most icons are pure path glyphs without `<text>` elements; the complex tier exists primarily to confirm that the extractor handles every glyph without throwing.
+## License
+
+MIT — see [LICENSE](./LICENSE).
