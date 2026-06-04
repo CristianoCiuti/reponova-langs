@@ -73,19 +73,23 @@ describe("complex fixture: simple-icons 16.22.0", () => {
       if (result.fileNode.docstring) withTitle += 1;
     }
 
-    // simple-icons SVGs are pure path glyphs; they typically contain no
-    // <text> elements so most files yield zero "section" symbols, which is
-    // the correct extractor behaviour. Some icons embed a <title> and so
-    // the docstring should show up for at least a handful of them.
-    expect(withTitle).toBeGreaterThanOrEqual(0);
-    expect(totalSymbols).toBeGreaterThanOrEqual(0);
+    // The simple-icons SVG format puts the brand name in a top-level
+    // <title> element. The extractor surfaces every <title> as both the
+    // file docstring and a `section` symbol, so the bulk of the 75 icons
+    // contribute exactly one symbol; the cap of 20 per file is never
+    // tripped because each icon has only one label.
+    expect(withTitle).toBeGreaterThanOrEqual(70);
+    expect(totalSymbols).toBeGreaterThanOrEqual(70);
   });
 
-  it("docker.svg extracts cleanly", () => {
+  it("docker.svg extracts cleanly and recovers the brand name from <title>", () => {
     const source = readFileSync(resolve(iconsDir, "docker.svg"), "utf8");
     const result = new SvgExtractor().extract(null, source, "complex/simple-icons-16.22.0/icons/docker.svg");
     expect(result.fileNode.kind).toBe("diagram");
     expect(result.language).toBe("diagram");
+    expect(result.fileNode.docstring).toBe("Docker");
+    const docstrings = result.symbols.map((s) => s.docstring);
+    expect(docstrings).toContain("Docker");
   });
 
   it("does not throw on the largest icon (postgresql.svg)", () => {
