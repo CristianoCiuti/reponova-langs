@@ -22,12 +22,40 @@ export const python: LanguageSupport = {
 // TREE-SITTER EXTRACTION
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Container nodes that wrap further statements at the same logical scope.
+ * Walking through them surfaces declarations buried inside
+ * `if TYPE_CHECKING:` / `try / except ImportError:` blocks so the outline
+ * for typed Python projects matches what users actually see in the file.
+ */
+const STATEMENT_CONTAINERS = new Set([
+  "module",
+  "if_statement",
+  "elif_clause",
+  "else_clause",
+  "try_statement",
+  "except_clause",
+  "except_group_clause",
+  "finally_clause",
+  "block",
+]);
+
+function walkContainer(node: SyntaxNode, action: (stmt: SyntaxNode) => void): void {
+  for (const child of node.namedChildren) {
+    if (STATEMENT_CONTAINERS.has(child.type)) {
+      walkContainer(child, action);
+    } else {
+      action(child);
+    }
+  }
+}
+
 function treeSitterExtract(rootNode: SyntaxNode, filePath: string, lineCount: number): FileOutline {
   const imports: ImportEntry[] = [];
   const functions: FunctionEntry[] = [];
   const classes: ClassEntry[] = [];
 
-  for (const child of rootNode.namedChildren) {
+  walkContainer(rootNode, (child) => {
     switch (child.type) {
       case "import_statement":
         imports.push(tsExtractImport(child));
@@ -45,7 +73,7 @@ function treeSitterExtract(rootNode: SyntaxNode, filePath: string, lineCount: nu
         classes.push(tsExtractClass(child));
         break;
     }
-  }
+  });
 
   return { file_path: filePath, line_count: lineCount, imports, functions, classes };
 }
@@ -101,9 +129,9 @@ function tsExtractClass(node: SyntaxNode, _decorators: string[] = []): ClassEntr
   const bases: string[] = [];
   if (superclassNode) {
     for (const arg of superclassNode.namedChildren) {
-      if (arg.type === "identifier" || arg.type === "dotted_name" || arg.type === "attribute") {
-        bases.push(arg.text);
-      }
+      if (arg.type === "keyword_argument") continue;
+      const baseName = unwrapBase(arg);
+      if (baseName) bases.push(baseName);
     }
   }
 
@@ -140,6 +168,27 @@ function tsExtractDecorated(node: SyntaxNode, functions: FunctionEntry[], classe
     functions.push(tsExtractFunction(definition, decorators));
   } else {
     classes.push(tsExtractClass(definition, decorators));
+  }
+}
+
+/**
+ * Reduce a class-base argument node to its bare type name. Mirrors the
+ * helper in `extractor.ts` so the outline pipeline records the same
+ * heritage shape as the graph pipeline (incl. `subscript` unwrap for
+ * `Cache[K, V]` / `typing.Generic[K, V]`).
+ */
+function unwrapBase(node: SyntaxNode): string | null {
+  switch (node.type) {
+    case "identifier":
+    case "dotted_name":
+    case "attribute":
+      return node.text;
+    case "subscript": {
+      const value = node.childForFieldName("value") ?? node.namedChildren[0];
+      return value ? unwrapBase(value) : null;
+    }
+    default:
+      return null;
   }
 }
 

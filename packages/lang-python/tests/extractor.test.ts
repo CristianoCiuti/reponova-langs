@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { plugin, PythonExtractor } from "../src/index.js";
+import { python as pythonOutline } from "../src/outline.js";
 
 describe("@reponova/lang-python plugin", () => {
   it("exports a valid LanguagePlugin", () => {
@@ -188,6 +189,223 @@ class Greeter:
 
     const callRef = result.references.find(r => r.kind === "calls" && r.name === "print");
     expect(callRef).toBeDefined();
+  });
+
+  it("should surface imports and declarations inside `if TYPE_CHECKING:` blocks", async () => {
+    const wts = await import("web-tree-sitter");
+    const Parser = (wts as any).default ?? (wts as any).Parser;
+    await Parser.init();
+    const Language = (wts as any).Language ?? Parser.Language;
+    const lang = await Language.load(plugin.grammarPath!);
+    const parser = new Parser();
+    parser.setLanguage(lang);
+
+    const source = [
+      "from __future__ import annotations",
+      "from typing import TYPE_CHECKING",
+      "",
+      "if TYPE_CHECKING:",
+      "    from collections.abc import Mapping",
+      "    from .domain import User as DomainUser",
+      "",
+      "def at_runtime() -> None:",
+      "    pass",
+      "",
+    ].join("\n");
+    const tree = parser.parse(source);
+    const ext = new PythonExtractor();
+    const result = ext.extract(tree, source, "pkg/conditional.py");
+
+    const modules = result.imports.map((i) => i.module);
+    expect(modules).toContain("__future__");
+    expect(modules).toContain("typing");
+    expect(modules).toContain("collections.abc");
+    // Relative imports inside TYPE_CHECKING are also surfaced.
+    expect(modules.some((m) => m.startsWith("."))).toBe(true);
+
+    const symNames = result.symbols.map((s) => s.name);
+    expect(symNames).toContain("at_runtime");
+  });
+
+  it("should surface imports inside `try / except ImportError` soft-dependency blocks", async () => {
+    const wts = await import("web-tree-sitter");
+    const Parser = (wts as any).default ?? (wts as any).Parser;
+    await Parser.init();
+    const Language = (wts as any).Language ?? Parser.Language;
+    const lang = await Language.load(plugin.grammarPath!);
+    const parser = new Parser();
+    parser.setLanguage(lang);
+
+    const source = [
+      "try:",
+      "    import tomllib",
+      "except ImportError:  # Python < 3.11",
+      "    import tomli as tomllib",
+      "",
+    ].join("\n");
+    const tree = parser.parse(source);
+    const ext = new PythonExtractor();
+    const result = ext.extract(tree, source, "pkg/softdeps.py");
+
+    const modules = result.imports.map((i) => i.module);
+    expect(modules).toContain("tomllib");
+    expect(modules).toContain("tomli");
+  });
+
+  it("should capture TypeVar / NewType / ParamSpec / TypeVarTuple as `type` symbols", async () => {
+    const wts = await import("web-tree-sitter");
+    const Parser = (wts as any).default ?? (wts as any).Parser;
+    await Parser.init();
+    const Language = (wts as any).Language ?? Parser.Language;
+    const lang = await Language.load(plugin.grammarPath!);
+    const parser = new Parser();
+    parser.setLanguage(lang);
+
+    const source = [
+      "from typing import TypeVar, NewType, ParamSpec, TypeVarTuple",
+      "import typing as t",
+      "",
+      "K = TypeVar('K')",
+      "V = t.TypeVar('V')",
+      "UserId = NewType('UserId', int)",
+      "P = ParamSpec('P')",
+      "Ts = TypeVarTuple('Ts')",
+      "",
+    ].join("\n");
+    const tree = parser.parse(source);
+    const ext = new PythonExtractor();
+    const result = ext.extract(tree, source, "pkg/typevars.py");
+
+    const findKind = (name: string) => result.symbols.find((s) => s.name === name);
+    expect(findKind("K")?.kind).toBe("type");
+    expect(findKind("K")?.decorators).toEqual(["typevar"]);
+    expect(findKind("V")?.kind).toBe("type");
+    expect(findKind("V")?.decorators).toEqual(["typevar"]);
+    expect(findKind("UserId")?.kind).toBe("type");
+    expect(findKind("UserId")?.decorators).toEqual(["newtype"]);
+    expect(findKind("P")?.decorators).toEqual(["paramspec"]);
+    expect(findKind("Ts")?.decorators).toEqual(["typevartuple"]);
+  });
+
+  it("should capture PascalCase = Subscript / Union as type aliases, but not lowercase or subscripted lookups", async () => {
+    const wts = await import("web-tree-sitter");
+    const Parser = (wts as any).default ?? (wts as any).Parser;
+    await Parser.init();
+    const Language = (wts as any).Language ?? Parser.Language;
+    const lang = await Language.load(plugin.grammarPath!);
+    const parser = new Parser();
+    parser.setLanguage(lang);
+
+    const source = [
+      "from typing import Dict, List, Union",
+      "",
+      "User = Dict[str, str]",
+      "Ids = list[int]",
+      "Maybe = Union[int, None]",
+      "Either = int | str",
+      "",
+      "result = my_dict[key]  # NOT a type alias (lowercase)",
+      "MAX_RETRIES = 3        # constant, not alias",
+      "",
+    ].join("\n");
+    const tree = parser.parse(source);
+    const ext = new PythonExtractor();
+    const result = ext.extract(tree, source, "pkg/aliases.py");
+
+    const find = (name: string) => result.symbols.find((s) => s.name === name);
+    expect(find("User")?.kind).toBe("type");
+    expect(find("User")?.decorators).toEqual(["alias"]);
+    expect(find("Ids")?.kind).toBe("type");
+    expect(find("Maybe")?.kind).toBe("type");
+    expect(find("Either")?.kind).toBe("type");
+
+    // Lowercase RHS = subscript should NOT promote to type.
+    expect(find("result")).toBeUndefined();
+    // Constants stay constants.
+    expect(find("MAX_RETRIES")?.kind).toBe("constant");
+  });
+
+  it("should mark async functions with the `async` decorator", async () => {
+    const wts = await import("web-tree-sitter");
+    const Parser = (wts as any).default ?? (wts as any).Parser;
+    await Parser.init();
+    const Language = (wts as any).Language ?? Parser.Language;
+    const lang = await Language.load(plugin.grammarPath!);
+    const parser = new Parser();
+    parser.setLanguage(lang);
+
+    const source = [
+      "async def fetch(url: str) -> str:",
+      "    return ''",
+      "",
+      "def sync_fn() -> None:",
+      "    pass",
+      "",
+      "class Worker:",
+      "    async def run(self) -> None:",
+      "        pass",
+      "    def stop(self) -> None:",
+      "        pass",
+      "",
+    ].join("\n");
+    const tree = parser.parse(source);
+    const ext = new PythonExtractor();
+    const result = ext.extract(tree, source, "pkg/async_demo.py");
+
+    const fetch = result.symbols.find((s) => s.name === "fetch")!;
+    expect(fetch.decorators).toContain("async");
+    const sync = result.symbols.find((s) => s.name === "sync_fn")!;
+    expect(sync.decorators ?? []).not.toContain("async");
+
+    const run = result.symbols.find((s) => s.name === "run")!;
+    expect(run.decorators).toContain("async");
+    const stop = result.symbols.find((s) => s.name === "stop")!;
+    expect(stop.decorators ?? []).not.toContain("async");
+  });
+
+  it("outline pipeline keeps parity with the extractor for subscripted bases and TYPE_CHECKING imports", async () => {
+    // The outline tree-sitter pipeline ships separately from the extractor
+    // and must surface the same heritage and conditional-import shapes.
+    // This regression test pins both invariants so future changes to
+    // either side stay in sync.
+    const wts = await import("web-tree-sitter");
+    const Parser = (wts as any).default ?? (wts as any).Parser;
+    await Parser.init();
+    const Language = (wts as any).Language ?? Parser.Language;
+    const lang = await Language.load(plugin.grammarPath!);
+    const parser = new Parser();
+    parser.setLanguage(lang);
+
+    const source = [
+      "from typing import TYPE_CHECKING, Generic, TypeVar",
+      "",
+      "if TYPE_CHECKING:",
+      "    from collections.abc import Mapping",
+      "",
+      "K = TypeVar('K')",
+      "V = TypeVar('V')",
+      "",
+      "class Cache(Generic[K, V]):",
+      "    pass",
+      "",
+      "class StrCache(Cache[str, str]):",
+      "    pass",
+      "",
+    ].join("\n");
+    const tree = parser.parse(source);
+    expect(pythonOutline.treeSitterExtract).toBeDefined();
+    const outline = pythonOutline.treeSitterExtract!(tree.rootNode, "pkg/cache.py", source.split("\n").length);
+
+    // Outline surfaces both top-level and conditional-block imports.
+    const outlineModules = outline.imports.map((i) => i.module);
+    expect(outlineModules).toContain("typing");
+    expect(outlineModules).toContain("collections.abc");
+
+    // Outline subscripted bases collapse to bare type names.
+    const cache = outline.classes.find((c: { name: string }) => c.name === "Cache");
+    expect(cache?.bases).toContain("Generic");
+    const strCache = outline.classes.find((c: { name: string }) => c.name === "StrCache");
+    expect(strCache?.bases).toContain("Cache");
   });
 
   it("should unwrap subscripted / dotted bases and ignore keyword arguments", async () => {

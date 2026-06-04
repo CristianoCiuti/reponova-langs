@@ -109,15 +109,37 @@ describe("medium/cache.py fixture", () => {
     expect(importedModules).toContain("typing");
   });
 
+  it("captures TypeVar declarations as type symbols and async methods carry the async marker", async () => {
+    // The medium fixture declares K and V as TypeVars at module level,
+    // and AsyncCacheFacade.get_or_load / .warm are async methods. Both
+    // were silently dropped by previous releases; pin the new behaviour.
+    const source = loadFixture(packageRoot, "medium/cache.py");
+    const tree = await parse(source);
+    const result = new PythonExtractor().extract(tree, source, "medium/cache.py");
+
+    const k = result.symbols.find((s) => s.name === "K");
+    const v = result.symbols.find((s) => s.name === "V");
+    expect(k?.kind).toBe("type");
+    expect(k?.decorators).toEqual(["typevar"]);
+    expect(v?.kind).toBe("type");
+
+    const asyncMethod = result.symbols.find(
+      (s) => s.name === "get_or_load" && s.parent === "AsyncCacheFacade",
+    );
+    expect(asyncMethod?.decorators).toContain("async");
+    const syncMethod = result.symbols.find(
+      (s) => s.name === "get" && s.parent === "InMemoryCache",
+    );
+    expect(syncMethod?.decorators ?? []).not.toContain("async");
+  });
+
   it("subscripted generic bases collapse to bare type names + ignore keyword args", async () => {
-    // Regression guard for the v0.2.x fix that taught the extractor to
-    // recurse into `subscript` AST nodes when collecting class heritage.
-    // The expectations here pin both sides of that change:
-    //   1. `class Cache(ABC, Generic[K, V])` keeps `ABC` AND now also
-    //      records `Generic` (via subscript unwrap).
-    //   2. `class InMemoryCache(Cache[K, V])` records `Cache` (was [] before).
-    //   3. `class AsyncCacheFacade(Generic[K, V])` records `Generic`.
-    //   4. Keyword arguments like `metaclass=Meta` continue to be ignored.
+    // Regression guard: the heritage extractor recurses into `subscript`
+    // AST nodes. The expectations pin all four cases in cache.py:
+    //   1. `class Cache(ABC, Generic[K, V])` → ["ABC", "Generic"].
+    //   2. `class InMemoryCache(Cache[K, V])` → ["Cache"].
+    //   3. `class AsyncCacheFacade(Generic[K, V])` → ["Generic"].
+    //   4. Keyword arguments like `metaclass=Meta` are ignored.
     const source = loadFixture(packageRoot, "medium/cache.py");
     const tree = await parse(source);
     const result = new PythonExtractor().extract(tree, source, "medium/cache.py");
