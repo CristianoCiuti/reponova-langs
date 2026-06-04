@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200" width="400" height="200">
+  <title>Three-tier layout</title>
+  <desc>Boxes representing the Frontend, API, and Database tiers.</desc>
+
+  <rect x="20"  y="60" width="100" height="60" fill="#88c" stroke="#225" stroke-width="2" rx="8"/>
+  <text x="70" y="95" text-anchor="middle" font-family="sans-serif" font-size="14" fill="white">Frontend</text>
+
+  <rect x="150" y="60" width="100" height="60" fill="#8c8" stroke="#252" stroke-width="2" rx="8"/>
+  <text x="200" y="95" text-anchor="middle" font-family="sans-serif" font-size="14" fill="white">API</text>
+
+  <rect x="280" y="60" width="100" height="60" fill="#c88" stroke="#522" stroke-width="2" rx="8"/>
+  <text x="330" y="95" text-anchor="middle" font-family="sans-serif" font-size="14" fill="white">Database</text>
+
+  <line x1="120" y1="90" x2="150" y2="90" stroke="#444" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="250" y1="90" x2="280" y2="90" stroke="#444" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#444"/>
+    </marker>
+  </defs>
+</svg>

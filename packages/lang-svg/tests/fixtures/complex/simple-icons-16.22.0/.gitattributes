@@ -1,0 +1,7 @@
+# Force LF on every platform; SHA-256 hashes in _manifest.json must hold
+# regardless of core.autocrlf settings on the consumer machine.
+*           text eol=lf
+*.svg       text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+LICENSE*    text eol=lf

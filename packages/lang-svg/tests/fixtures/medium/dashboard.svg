@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+  <title>Operations Dashboard</title>
+  <desc>Schematic of the daily operations dashboard with widgets and a side panel.</desc>
+
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1e293b"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="cardGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#334155"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <radialGradient id="alertGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#f87171" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#f87171" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="dotsPattern" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.2" fill="#475569"/>
+    </pattern>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+      <feOffset dx="0" dy="2"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="800" height="500" fill="url(#bgGrad)"/>
+  <rect width="800" height="500" fill="url(#dotsPattern)" opacity="0.25"/>
+
+  <g transform="translate(0,0)">
+    <rect x="0" y="0" width="200" height="500" fill="#0b1220"/>
+    <text x="20" y="36" font-family="sans-serif" font-size="18" fill="white" font-weight="bold">RepoNova</text>
+    <text x="20" y="80"  font-family="sans-serif" font-size="13" fill="#cbd5e1">Overview</text>
+    <text x="20" y="110" font-family="sans-serif" font-size="13" fill="#94a3b8">Repositories</text>
+    <text x="20" y="140" font-family="sans-serif" font-size="13" fill="#94a3b8">Pipelines</text>
+    <text x="20" y="170" font-family="sans-serif" font-size="13" fill="#94a3b8">Alerts</text>
+    <text x="20" y="200" font-family="sans-serif" font-size="13" fill="#94a3b8">Settings</text>
+  </g>
+
+  <g transform="translate(220,30)" filter="url(#softShadow)">
+    <rect width="170" height="120" fill="url(#cardGrad)" rx="10"/>
+    <text x="85" y="36" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#cbd5e1">Active Repos</text>
+    <text x="85" y="76" text-anchor="middle" font-family="sans-serif" font-size="32" fill="white" font-weight="bold">128</text>
+    <text x="85" y="100" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#86efac">+12% this week</text>
+  </g>
+
+  <g transform="translate(410,30)" filter="url(#softShadow)">
+    <rect width="170" height="120" fill="url(#cardGrad)" rx="10"/>
+    <text x="85" y="36" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#cbd5e1">Open PRs</text>
+    <text x="85" y="76" text-anchor="middle" font-family="sans-serif" font-size="32" fill="white" font-weight="bold">42</text>
+    <text x="85" y="100" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#fde68a">3 awaiting review</text>
+  </g>
+
+  <g transform="translate(600,30)" filter="url(#softShadow)">
+    <rect width="170" height="120" fill="url(#cardGrad)" rx="10"/>
+    <circle cx="140" cy="20" r="22" fill="url(#alertGlow)"/>
+    <text x="85" y="36" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#cbd5e1">Failing Builds</text>
+    <text x="85" y="76" text-anchor="middle" font-family="sans-serif" font-size="32" fill="#fecaca" font-weight="bold">3</text>
+    <text x="85" y="100" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#fda4af">Needs attention</text>
+  </g>
+
+  <g transform="translate(220,180)" filter="url(#softShadow)">
+    <rect width="560" height="290" fill="url(#cardGrad)" rx="10"/>
+    <text x="20" y="32" font-family="sans-serif" font-size="14" fill="white">Latest Activity</text>
+
+    <line x1="20" y1="50" x2="540" y2="50" stroke="#475569"/>
+    <text x="40" y="80"  font-family="sans-serif" font-size="12" fill="#cbd5e1">PR opened in lang-typescript</text>
+    <text x="40" y="110" font-family="sans-serif" font-size="12" fill="#cbd5e1">CI succeeded for lang-python</text>
+    <text x="40" y="140" font-family="sans-serif" font-size="12" fill="#cbd5e1">Release published lang-svg v0.2.0</text>
+    <text x="40" y="170" font-family="sans-serif" font-size="12" fill="#cbd5e1">Issue resolved in lang-plantuml</text>
+    <text x="40" y="200" font-family="sans-serif" font-size="12" fill="#cbd5e1">New plugin proposal: lang-tsx</text>
+    <text x="40" y="230" font-family="sans-serif" font-size="12" fill="#cbd5e1">Trust publisher rotated for org</text>
+    <text x="40" y="260" font-family="sans-serif" font-size="12" fill="#cbd5e1">Grammar fetcher refreshed manifest</text>
+  </g>
+
+  <path d="M 240 470 Q 400 440 760 460" stroke="#22c55e" stroke-width="2" fill="none"/>
+</svg>

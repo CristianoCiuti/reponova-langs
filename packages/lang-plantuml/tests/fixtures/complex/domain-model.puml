@@ -1,0 +1,64 @@
+@startuml
+title Domain model — multi-tenant SaaS
+
+skinparam packageStyle rectangle
+
+package "Identity" {
+    abstract class Principal {
+        +id : UUID
+        +displayName() : str
+    }
+    class User extends Principal
+    class ServiceAccount extends Principal
+    class Organisation
+    class Membership
+    enum Role {
+        OWNER
+        ADMIN
+        MEMBER
+        GUEST
+    }
+
+    User "*" -- "1..*" Membership
+    Organisation "1" -- "*" Membership
+    Membership --> Role : holds
+}
+
+package "Billing" {
+    class Subscription
+    class Plan
+    class Invoice
+    class LineItem
+    interface PriceCalculator
+    class FlatPriceCalculator implements PriceCalculator
+    class TieredPriceCalculator implements PriceCalculator
+
+    Subscription "1" -- "1" Plan
+    Subscription "1" o-- "*" Invoice
+    Invoice "1" o-- "*" LineItem
+    Plan ..> PriceCalculator : uses
+}
+
+package "Workspace" {
+    class Workspace
+    class Project
+    class Document
+    class Comment
+
+    Workspace "1" *-- "*" Project
+    Project   "1" *-- "*" Document
+    Document  "1" *-- "*" Comment
+}
+
+Organisation "1" -- "*" Workspace
+Membership ..> Workspace : grants access
+Subscription ..> Organisation : billed to
+
+note bottom of Plan
+  Plans are immutable;
+  upgrades create a new
+  Subscription tied to the
+  same Organisation.
+end note
+
+@enduml

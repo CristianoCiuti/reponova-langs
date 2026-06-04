@@ -1,0 +1,58 @@
+@startuml
+title Service topology — event-driven backend
+
+skinparam componentStyle rectangle
+
+cloud "Public Internet" {
+    [Browser]
+    [Mobile App]
+}
+
+node "Edge" {
+    [CDN]
+    [API Gateway]
+}
+
+node "Application tier" {
+    component "Auth Service" as AUTH
+    component "Order Service" as ORDER
+    component "Inventory Service" as INV
+    component "Notification Service" as NOTIF
+    interface "REST" as REST
+    interface "gRPC" as GRPC
+}
+
+node "Data tier" {
+    database "Auth DB" as AUTH_DB
+    database "Order DB" as ORDER_DB
+    database "Inventory DB" as INV_DB
+    queue "Event Bus" as BUS
+    cloud "Object Storage" as S3
+}
+
+[Browser]      --> [CDN]
+[Mobile App]   --> [API Gateway]
+[CDN]          --> [API Gateway]
+[API Gateway]  --> REST
+REST           --> AUTH
+REST           --> ORDER
+REST           --> INV
+ORDER          --> GRPC
+GRPC           --> INV
+
+AUTH  --> AUTH_DB
+ORDER --> ORDER_DB
+INV   --> INV_DB
+
+ORDER --> BUS : OrderPlaced
+INV   --> BUS : StockChanged
+BUS   --> NOTIF
+NOTIF --> S3 : email logs
+
+note right of BUS
+  At-least-once delivery.
+  Consumers MUST be idempotent
+  (dedupe by event_id).
+end note
+
+@enduml

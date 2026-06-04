@@ -1,0 +1,52 @@
+@startuml
+title OAuth 2.1 Authorization Code with PKCE
+
+actor "Resource Owner" as RO
+participant "User Agent" as UA
+participant "Client App" as CLI
+participant "Authorization Server" as AS
+participant "Resource Server" as RS
+
+== PKCE preparation ==
+CLI -> CLI : generate code_verifier
+CLI -> CLI : derive code_challenge = SHA256(code_verifier)
+
+== Authorization request ==
+RO -> UA : open app
+UA -> CLI : load
+CLI -> UA : redirect to AS\n(authorize?response_type=code&\n code_challenge=...&state=...)
+UA -> AS : GET /authorize
+activate AS
+AS -> RO : login + consent prompt
+RO --> AS : credentials + grant
+AS -> UA : 302 with code, state
+deactivate AS
+UA -> CLI : code, state
+
+== Token exchange ==
+CLI -> AS : POST /token\n(code, code_verifier, client_id)
+activate AS
+AS -> AS : verify code_challenge
+AS --> CLI : access_token, refresh_token, id_token
+deactivate AS
+
+== Resource access ==
+loop while access_token valid
+    CLI -> RS : GET /resource\nAuthorization: Bearer access_token
+    RS -> RS : verify signature + scopes
+    RS --> CLI : 200 OK + payload
+end
+
+== Refresh ==
+CLI -> AS : POST /token\n(refresh_token)
+activate AS
+AS --> CLI : new access_token
+deactivate AS
+
+note over CLI, AS
+  PKCE prevents authorization-code
+  interception even when client_secret
+  is unavailable (e.g. SPA, mobile).
+end note
+
+@enduml
