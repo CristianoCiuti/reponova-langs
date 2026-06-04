@@ -139,11 +139,17 @@ describe("complex/ tier: 5 real-world diagrams", () => {
     );
     // The `[*]` pseudostate is intentionally NOT a symbol.
     expect(names).not.toContain("*");
-    // States introduced only by transitions (e.g. `Empty`, `Cancelled`,
-    // `Delivered`, `Closed`) are intentionally not promoted to symbols —
-    // only explicit `state X` declarations count.
-    expect(names).not.toContain("Empty");
-    expect(names).not.toContain("Cancelled");
+    // States that appear only on the right-hand side of a transition
+    // (e.g. `Empty`, `Cancelled`, `Delivered`, `Closed`) are now
+    // promoted as implicit-state symbols so that pure state-diagram
+    // files written without standalone `state X` lines still produce
+    // a useful graph.
+    expect(names).toContain("Empty");
+    expect(names).toContain("Cancelled");
+
+    const implicitState = result.symbols.find((s) => s.name === "Empty");
+    expect(implicitState?.kind).toBe("component");
+    expect(implicitState?.decorators).toEqual(["state", "implicit"]);
 
     expect(result.symbols.find((s) => s.name === "A")?.docstring).toBe("Authorising");
   });

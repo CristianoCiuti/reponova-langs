@@ -116,11 +116,20 @@ const C4_REGEX = new RegExp(
 /** `[Browser]` style inline component. */
 const BRACKET_REGEX = /\[([A-Za-z][\w \-./]*)\]/g;
 
-/** `[*]` is the state-diagram pseudostate; never a real symbol. */
-const PSEUDOSTATE = /^\s*\[\s*\*\s*\]/;
-
-/** Title directive — used as the file-node docstring. */
+/**
+ * Single-line metadata directives. Their bodies are used as fallbacks for
+ * the file-node docstring when no `title` is present, in the precedence
+ * order: `title` > `caption` > `header` > `footer`.
+ */
 const TITLE_REGEX = /^\s*title\s+(.+)/i;
+const CAPTION_REGEX = /^\s*caption\s+(.+)/i;
+const HEADER_INLINE_REGEX = /^\s*(?:center|left|right)?\s*header\s+(.+)/i;
+const FOOTER_INLINE_REGEX = /^\s*(?:center|left|right)?\s*footer\s+(.+)/i;
+/** Multi-line block openers. The block is terminated by `end<directive>`. */
+const HEADER_BLOCK_OPEN = /^\s*(?:center|left|right)?\s*header\s*$/i;
+const FOOTER_BLOCK_OPEN = /^\s*(?:center|left|right)?\s*footer\s*$/i;
+const HEADER_BLOCK_CLOSE = /^\s*endheader\s*$/i;
+const FOOTER_BLOCK_CLOSE = /^\s*endfooter\s*$/i;
 
 /** Class-style relationship: `Foo --> Bar`, `Foo o-- Bar`, `Foo ..> Bar`, … */
 const RELATION_REGEX = /^\s*(\w+)\s*([<\-.|>*o]+)\s*(\w+)/;
@@ -137,10 +146,12 @@ export class PlantUmlExtractor implements LanguageExtractor {
     const moduleName = this.filePathToModuleName(filePath);
     const fileName = posixBasename(filePath);
 
+    const metadata = this.extractMetadata(lines);
+
     const fileNode: FileNodeDeclaration = {
       kind: "diagram",
       label: fileName,
-      docstring: this.extractPumlTitle(lines),
+      docstring: metadata.title ?? metadata.caption ?? metadata.header ?? metadata.footer,
       tags: ["plantuml"],
     };
 
@@ -163,13 +174,36 @@ export class PlantUmlExtractor implements LanguageExtractor {
       });
     };
 
+    /**
+     * Bare identifiers that appear as transition endpoints but have no
+     * matching explicit declaration. Resolved after the main loop so that
+     * a state declared LATER in the file (`state X #green`) still wins
+     * over an earlier transition mention.
+     */
+    const transitionCandidates: Array<{ name: string; line: number }> = [];
+
+    // Track block scope for multi-line skip directives so we don't try to
+    // parse the body as PlantUML statements.
+    let inBlock: "header" | "footer" | "note" | null = null;
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]!;
 
-      if (PSEUDOSTATE.test(line)) {
-        // `[*] --> Draft` only contributes a transition; we skip the LHS
-        // pseudostate but still let the relationship regex below run on the
-        // remainder so the transition gets recorded.
+      if (inBlock === "header") {
+        if (HEADER_BLOCK_CLOSE.test(line)) inBlock = null;
+        continue;
+      }
+      if (inBlock === "footer") {
+        if (FOOTER_BLOCK_CLOSE.test(line)) inBlock = null;
+        continue;
+      }
+      if (HEADER_BLOCK_OPEN.test(line)) {
+        inBlock = "header";
+        continue;
+      }
+      if (FOOTER_BLOCK_OPEN.test(line)) {
+        inBlock = "footer";
+        continue;
       }
 
       const declMatch = line.match(DECL_REGEX);
@@ -236,8 +270,35 @@ export class PlantUmlExtractor implements LanguageExtractor {
             kind: "extends",
             line: i + 1,
           });
+          // Defer implicit promotion: the endpoint may be declared later
+          // in the file, in which case the explicit declaration wins.
+          if (/^[A-Za-z_]/.test(from)) {
+            transitionCandidates.push({ name: from, line: i + 1 });
+          }
+          if (/^[A-Za-z_]/.test(to)) {
+            transitionCandidates.push({ name: to, line: i + 1 });
+          }
         }
       }
+    }
+
+    // Promote any transition endpoint that never received an explicit
+    // declaration anywhere else in the file. This covers state diagrams
+    // written purely as `[*] --> Draft` / `Draft --> Submitted` chains
+    // without any standalone `state X` lines, which used to produce
+    // zero symbols.
+    for (const { name, line } of transitionCandidates) {
+      if (seen.has(name)) continue;
+      seen.add(name);
+      symbols.push({
+        name,
+        qualifiedName: `${moduleName}.${name}`,
+        kind: "component",
+        decorators: ["state", "implicit"],
+        startLine: line,
+        endLine: line,
+        parent: fileName,
+      });
     }
 
     return { filePath, language: "diagram", fileNode, symbols, imports: [], references };
@@ -275,12 +336,78 @@ export class PlantUmlExtractor implements LanguageExtractor {
     return /^[A-Za-z_]/.test(ascii) ? ascii : `_${ascii}`;
   }
 
-  private extractPumlTitle(lines: string[]): string | undefined {
-    for (const line of lines) {
+  /**
+   * Walk the file once and pull out every metadata directive PlantUML
+   * supports for prose annotations (title / caption / header / footer).
+   * Both single-line forms (`title Foo`) and the multi-line block forms
+   * (`header\n   Foo\nendheader`) are recognised. The first occurrence of
+   * each kind wins; the precedence at the call site is `title > caption
+   * > header > footer` for the file docstring.
+   */
+  private extractMetadata(lines: string[]): {
+    title?: string;
+    caption?: string;
+    header?: string;
+    footer?: string;
+  } {
+    const meta: { title?: string; caption?: string; header?: string; footer?: string } = {};
+    let blockKind: "header" | "footer" | null = null;
+    const blockBuffer: string[] = [];
+
+    const flushBlock = (): void => {
+      if (!blockKind) return;
+      const value = blockBuffer.join(" ").replace(/\s+/g, " ").trim();
+      if (value && !meta[blockKind]) meta[blockKind] = value;
+      blockKind = null;
+      blockBuffer.length = 0;
+    };
+
+    for (const rawLine of lines) {
+      const line = rawLine;
+
+      if (blockKind) {
+        if (
+          (blockKind === "header" && HEADER_BLOCK_CLOSE.test(line))
+          || (blockKind === "footer" && FOOTER_BLOCK_CLOSE.test(line))
+        ) {
+          flushBlock();
+          continue;
+        }
+        const trimmed = line.trim();
+        if (trimmed) blockBuffer.push(trimmed);
+        continue;
+      }
+
       const titleMatch = line.match(TITLE_REGEX);
-      if (titleMatch) return titleMatch[1]!.trim();
+      if (titleMatch && !meta.title) {
+        meta.title = titleMatch[1]!.trim();
+        continue;
+      }
+      const captionMatch = line.match(CAPTION_REGEX);
+      if (captionMatch && !meta.caption) {
+        meta.caption = captionMatch[1]!.trim();
+        continue;
+      }
+      const headerInlineMatch = line.match(HEADER_INLINE_REGEX);
+      if (headerInlineMatch && !meta.header) {
+        meta.header = headerInlineMatch[1]!.trim();
+        continue;
+      }
+      const footerInlineMatch = line.match(FOOTER_INLINE_REGEX);
+      if (footerInlineMatch && !meta.footer) {
+        meta.footer = footerInlineMatch[1]!.trim();
+        continue;
+      }
+      if (HEADER_BLOCK_OPEN.test(line) && !meta.header) {
+        blockKind = "header";
+        continue;
+      }
+      if (FOOTER_BLOCK_OPEN.test(line) && !meta.footer) {
+        blockKind = "footer";
+        continue;
+      }
     }
-    return undefined;
+    return meta;
   }
 
   private filePathToModuleName(filePath: string): string {
