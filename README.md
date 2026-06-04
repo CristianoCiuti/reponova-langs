@@ -43,12 +43,15 @@ See [`tools/grammar-fetcher/README.md`](./tools/grammar-fetcher/README.md) for a
 
 Each `@reponova/lang-*` package on npmjs.com is configured with a GitHub Actions OIDC Trusted Publisher pointing at `release.yml` in this repo. There are no long-lived `NPM_TOKEN` secrets in CI.
 
-Adding a new plugin to npm requires a one-time setup (first manual publish + `pnpm trust:configure --apply`). See [`tools/trust-configure/README.md`](./tools/trust-configure/README.md) for the end-to-end procedure.
+For a brand-new plugin, the first publish requires a one-time bootstrap (npm has a chicken-and-egg between Trusted Publisher and OIDC publishing). The `bootstrap-plugin` helper combines both steps in a single guided flow:
 
 ```bash
-pnpm trust:configure          # dry-run: list packages, show npm trust commands
-pnpm trust:configure --apply  # actually configure (requires npm login + npm >= 11.10.0)
+pnpm bootstrap-plugin lang-<id>   # publish + configure trust, ~90s
 ```
+
+After this runs once, every subsequent release is fully automated via CI.
+
+For details and the operational procedure, see [`tools/bootstrap-plugin/README.md`](./tools/bootstrap-plugin/README.md) and [`tools/trust-configure/README.md`](./tools/trust-configure/README.md).
 
 ### Scaffold a new plugin
 

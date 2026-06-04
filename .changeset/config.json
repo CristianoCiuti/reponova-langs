@@ -7,5 +7,5 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["@reponova/lang-test-utils", "@reponova/scaffold", "@reponova/grammar-fetcher", "@reponova/trust-configure"]
+  "ignore": ["@reponova/lang-test-utils", "@reponova/scaffold", "@reponova/grammar-fetcher", "@reponova/trust-configure", "@reponova/bootstrap-plugin"]
 }

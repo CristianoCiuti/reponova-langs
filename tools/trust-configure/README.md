@@ -53,7 +53,13 @@ It is **idempotent**: re-running it on already-configured packages is a no-op or
 
 ## Adding a new plugin: end-to-end flow
 
-When you add `@reponova/lang-<id>` to the monorepo and want it on npm with OIDC publishing, do this once:
+When you add `@reponova/lang-<id>` to the monorepo and want it on npm with OIDC publishing, the easiest path is the [`bootstrap-plugin`](../bootstrap-plugin/README.md) helper, which wraps both the manual publish and `trust:configure --apply` in one guided command:
+
+```bash
+pnpm bootstrap-plugin lang-<id>
+```
+
+Or, if you prefer to do the steps by hand:
 
 ```bash
 # 1. (after the initial PR with the new plugin is merged to main, the
