@@ -7,20 +7,21 @@
  *  - complex/  : 5 hand-authored real-world diagrams (class, sequence,
  *                component, state, C4 context).
  *
- * Known extractor scope (v0.2.x):
- *   The current PlantUML extractor recognises class-diagram constructs
- *   (`class`, `interface`, `enum`, `abstract` / `abstract class`) plus the
- *   `title` directive. It deliberately does NOT yet recognise:
- *     - sequence-diagram `actor` / `participant ... as ...`
- *     - state-diagram `state ...` / `[*]` transitions
- *     - component-diagram `component`/`cloud`/`node`/`database`/`queue`/
- *       `rectangle` keywords
- *     - C4-style `Person` / `System` / `Container` macros
- *   The complex/ fixtures intentionally cover those diagram families so
- *   that, when the extractor is later extended, the regression surface is
- *   already in place. For now, these tests assert the **invariants that
- *   hold today** (no crashes, title extraction, diagram tag, class-style
- *   landmark coverage).
+ * The extractor recognises:
+ *   - class-diagram constructs (`class`, `interface`, `enum`,
+ *     `abstract` / `abstract class`)
+ *   - sequence-diagram nodes (`actor`, `participant`, `boundary`,
+ *     `control`, `entity`, `collections`, `database`, `queue`)
+ *   - state-diagram declarations (`state X`, `state "Display" as Alias`)
+ *   - component-/deployment-diagram nodes (`component`, `cloud`, `node`,
+ *     `database`, `queue`, `rectangle`, `frame`, `folder`, `package`)
+ *   - the `[Foo]` bracket shorthand for inline components
+ *   - C4-DSL macros (`Person`, `System`, `Container`, `SystemDb`,
+ *     `ContainerDb`, …) plus their `_Ext` and `_Boundary` variants.
+ *
+ * Aliases win over display labels: `participant "Web UI" as UI` produces
+ * a symbol named `UI` (so it joins arrows like `UI -> API`) with the
+ * display label `Web UI` retained as the symbol's docstring.
  */
 
 import { describe, it, expect } from "vitest";
@@ -48,23 +49,35 @@ describe("simple/auth-classes.puml fixture", () => {
 });
 
 describe("medium/order-flow.puml fixture", () => {
-  it("parses without crashing and captures the title", () => {
+  it("captures sequence-diagram actors / participants / database via aliases", () => {
     const source = loadFixture(packageRoot, "medium/order-flow.puml");
     const result = new PlantUmlExtractor().extract(null, source, "medium/order-flow.puml");
 
     expect(result.fileNode.docstring).toBe("Order flow — checkout to fulfilment");
     expect(result.fileNode.kind).toBe("diagram");
     expect(result.fileNode.tags).toContain("plantuml");
-    // Sequence-diagram participants are not yet recognised by the extractor;
-    // see the "known extractor scope" note at the top of this file.
-    expect(result.symbols.length).toBe(0);
+
+    const names = result.symbols.map((s) => s.name);
+    expect(names).toEqual(
+      expect.arrayContaining(["Customer", "UI", "API", "PSP", "INV", "MAIL", "DB"]),
+    );
+
+    const customer = result.symbols.find((s) => s.name === "Customer")!;
+    expect(customer.decorators?.[0]).toBe("actor");
+
+    const ui = result.symbols.find((s) => s.name === "UI")!;
+    expect(ui.decorators?.[0]).toBe("participant");
+    expect(ui.docstring).toBe("Web UI");
+
+    const db = result.symbols.find((s) => s.name === "DB")!;
+    expect(db.decorators?.[0]).toBe("database");
   });
 });
 
 describe("complex/ tier: 5 real-world diagrams", () => {
   const complexDir = resolve(packageRoot, "tests/fixtures/complex");
 
-  it("every .puml file parses cleanly, has a title, and is tagged as plantuml", () => {
+  it("every .puml file parses cleanly, has a title, is tagged, and emits ≥ 1 symbol", () => {
     const files = readdirSync(complexDir).filter((f) => f.endsWith(".puml")).sort();
     expect(files.length).toBe(5);
 
@@ -75,10 +88,11 @@ describe("complex/ tier: 5 real-world diagrams", () => {
       const result = ext.extract(null, source, `complex/${f}`);
       expect(result.fileNode.docstring, `${f}: missing title`).toBeTruthy();
       expect(result.fileNode.tags, `${f}: should be tagged plantuml`).toContain("plantuml");
+      expect(result.symbols.length, `${f}: should emit ≥ 1 symbol`).toBeGreaterThan(0);
     }
   });
 
-  it("domain-model.puml extracts class-diagram landmarks (the supported subset)", () => {
+  it("domain-model.puml extracts class-diagram landmarks", () => {
     const source = readFileSync(resolve(complexDir, "domain-model.puml"), "utf8");
     const result = new PlantUmlExtractor().extract(null, source, "complex/domain-model.puml");
 
@@ -94,28 +108,104 @@ describe("complex/ tier: 5 real-world diagrams", () => {
     expect(enums).toContain("Role");
   });
 
-  it("non-class diagrams parse but emit (almost) zero symbols (extractor scope limitation)", () => {
-    // These fixtures intentionally exercise diagram families the extractor
-    // does not yet handle. The test pins the current behaviour so a future
-    // PR that adds support can flip these expectations.
-    const ext = new PlantUmlExtractor();
-    for (const f of ["auth-sequence.puml", "order-state.puml", "system-context.puml"]) {
-      const source = readFileSync(resolve(complexDir, f), "utf8");
-      const result = ext.extract(null, source, `complex/${f}`);
-      expect(result.symbols.length, `${f}: expected 0 symbols today`).toBe(0);
-      expect(result.fileNode.docstring, `${f}: should still capture title`).toBeTruthy();
-    }
+  it("auth-sequence.puml extracts every actor / participant by alias", () => {
+    const source = readFileSync(resolve(complexDir, "auth-sequence.puml"), "utf8");
+    const result = new PlantUmlExtractor().extract(null, source, "complex/auth-sequence.puml");
+
+    const names = result.symbols.map((s) => s.name);
+    expect(names).toEqual(expect.arrayContaining(["RO", "UA", "CLI", "AS", "RS"]));
+
+    expect(result.symbols.find((s) => s.name === "RO")?.decorators?.[0]).toBe("actor");
+    expect(result.symbols.find((s) => s.name === "UA")?.decorators?.[0]).toBe("participant");
   });
 
-  it("service-components.puml: extractor only catches `interface` declarations today", () => {
-    // The component diagram declares two `interface` boundaries (REST, gRPC)
-    // alongside many unrecognised keywords (component/cloud/node/database).
-    // The current regex only matches the interface lines.
+  it("order-state.puml extracts every explicit state declaration", () => {
+    const source = readFileSync(resolve(complexDir, "order-state.puml"), "utf8");
+    const result = new PlantUmlExtractor().extract(null, source, "complex/order-state.puml");
+
+    const names = result.symbols.map((s) => s.name);
+    // Explicit `state X` and `state "Display" as Alias` declarations.
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "Draft",
+        "AwaitingPayment",
+        "A",
+        "R",
+        "Paid",
+        "Picking",
+        "Packed",
+        "Shipped",
+      ]),
+    );
+    // The `[*]` pseudostate is intentionally NOT a symbol.
+    expect(names).not.toContain("*");
+    // States introduced only by transitions (e.g. `Empty`, `Cancelled`,
+    // `Delivered`, `Closed`) are intentionally not promoted to symbols —
+    // only explicit `state X` declarations count.
+    expect(names).not.toContain("Empty");
+    expect(names).not.toContain("Cancelled");
+
+    expect(result.symbols.find((s) => s.name === "A")?.docstring).toBe("Authorising");
+  });
+
+  it("service-components.puml extracts components, brackets, interfaces, databases and the queue", () => {
     const source = readFileSync(resolve(complexDir, "service-components.puml"), "utf8");
     const result = new PlantUmlExtractor().extract(null, source, "complex/service-components.puml");
 
+    const names = result.symbols.map((s) => s.name);
+    // Container nodes (cloud / node) by sanitised display label.
+    expect(names).toEqual(
+      expect.arrayContaining(["Public_Internet", "Edge", "Application_tier", "Data_tier"]),
+    );
+    // Bracket shorthand inside `cloud { ... }`.
+    expect(names).toEqual(
+      expect.arrayContaining(["Browser", "Mobile_App", "CDN", "API_Gateway"]),
+    );
+    // Component / database / queue / cloud aliases.
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "AUTH",
+        "ORDER",
+        "INV",
+        "NOTIF",
+        "AUTH_DB",
+        "ORDER_DB",
+        "INV_DB",
+        "BUS",
+        "S3",
+      ]),
+    );
+
     const interfaces = result.symbols.filter((s) => s.kind === "interface").map((s) => s.name);
-    expect(interfaces).toContain("REST");
-    expect(interfaces).toContain("gRPC");
+    expect(interfaces).toEqual(expect.arrayContaining(["REST", "GRPC"]));
+  });
+
+  it("system-context.puml extracts actors, the platform rectangle, and every component / database", () => {
+    const source = readFileSync(resolve(complexDir, "system-context.puml"), "utf8");
+    const result = new PlantUmlExtractor().extract(null, source, "complex/system-context.puml");
+
+    const names = result.symbols.map((s) => s.name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "cust",
+        "host",
+        "agent",
+        "platform",
+        "External",
+        "web",
+        "mob",
+        "back",
+        "api",
+        "db",
+        "psp",
+        "mail",
+        "maps",
+        "idp",
+      ]),
+    );
+
+    expect(result.symbols.find((s) => s.name === "cust")?.decorators?.[0]).toBe("actor");
+    expect(result.symbols.find((s) => s.name === "platform")?.decorators?.[0]).toBe("rectangle");
+    expect(result.symbols.find((s) => s.name === "db")?.decorators?.[0]).toBe("database");
   });
 });
