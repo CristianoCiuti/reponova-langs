@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.protection-backup.json
 *.log
 .DS_Store
 .vscode/

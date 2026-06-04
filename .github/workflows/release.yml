@@ -12,25 +12,41 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
-      id-token: write
+      contents: read       # safe default - reads only
+      id-token: write      # required for npm OIDC trusted publishing
     steps:
+      # A short-lived (1 hour) installation token from a dedicated GitHub App.
+      # The App is what owns the "Version Packages" PR, which is essential:
+      # PRs opened by github-actions[bot] (the default GITHUB_TOKEN identity)
+      # do NOT trigger workflows, so they would never satisfy branch
+      # protection's required status checks. PRs opened by a GitHub App do.
+      - name: Generate GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
+
       # npm >= 11.5.1 is required for OIDC trusted publishing on npmjs.org.
       # Node 22 ships with an older npm, so refresh it before publishing.
       - name: Upgrade npm for OIDC trusted publishing
         run: npm install -g npm@latest
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+
       - name: Create release PR or publish
         uses: changesets/action@v1
         with:
@@ -39,8 +55,10 @@ jobs:
           commit: 'chore(release): version packages'
           title: 'chore(release): version packages'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # App token, NOT secrets.GITHUB_TOKEN: this makes the PR appear as
+          # opened by the App and lets CI run on it normally.
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           # Enables npm provenance + OIDC trusted publishing.
-          # Each package needs a "Trusted Publisher" entry on npmjs.org
-          # pointing at CristianoCiuti/reponova-langs + this workflow.
+          # Each package must have a Trusted Publisher entry on npmjs.org
+          # pointing at CristianoCiuti/reponova-langs + release.yml.
           NPM_CONFIG_PROVENANCE: 'true'
