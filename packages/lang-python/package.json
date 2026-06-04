@@ -2,6 +2,21 @@
   "name": "@reponova/lang-python",
   "version": "0.2.1",
   "description": "Python language support for RepoNova",
+  "keywords": [
+    "reponova",
+    "reponova-plugin",
+    "language-plugin",
+    "python",
+    "py",
+    "tree-sitter",
+    "tree-sitter-python",
+    "ast",
+    "code-analysis",
+    "knowledge-graph",
+    "static-analysis",
+    "outline",
+    "symbol-extraction"
+  ],
   "type": "module",
   "exports": {
     ".": "./dist/index.js"

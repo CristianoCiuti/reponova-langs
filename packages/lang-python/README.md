@@ -1,6 +1,6 @@
 # @reponova/lang-python
 
-Python language support for [RepoNova](https://github.com/CristianoCiuti/reponova).
+Python language support for [RepoNova](https://github.com/CristianoCiuti/reponova). Parses `.py` / `.pyw` source files via the official [`tree-sitter-python`](https://github.com/tree-sitter/tree-sitter-python) WASM grammar.
 
 ## Install
 
@@ -8,11 +8,15 @@ Python language support for [RepoNova](https://github.com/CristianoCiuti/reponov
 reponova lang add @reponova/lang-python
 ```
 
-## What it provides
+## What it extracts
 
-- **Extraction**: Functions, classes, methods, decorators, docstrings, variables, imports, calls, inheritance
-- **Outline**: Tree-sitter AST outline with regex fallback
-- **Grammar**: `tree-sitter-python.wasm`
+- **Symbols**: functions, async functions, classes, methods, top-level `UPPER_SNAKE` constants, `dataclass`-style symbols.
+- **Decorators**: `@decorator` / `@module.decorator` on functions, methods, and classes.
+- **Docstrings**: module-level (first triple-quoted expression), per-function and per-class.
+- **Imports**: `import x`, `from x import y`, `from . import y`, `from .. import y`, aliased imports (`import x as y`), wildcard imports (`from x import *`). `__init__.py` imports are flagged as exports.
+- **Heritage**: plain (`Foo(Bar)`), subscripted generics (`Foo(Bar[K, V])` → `Bar`), dotted (`Foo(pkg.mod.Bar)`). `metaclass=Meta` keyword arguments are ignored.
+- **Calls**: every call expression in a function/method body, by name.
+- **Exports**: `__all__` literal list when present; otherwise every public top-level symbol (no leading `_`).
 
 ## Extensions
 
@@ -30,23 +34,18 @@ plugins:
     # exclude: []       # override global exclude for Python files
 ```
 
-No custom properties — Python extraction works out of the box with no additional config.
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable/disable Python file detection and extraction |
+| `patterns` | string[] | `[]` | Glob patterns to override global file matching for this plugin |
+| `exclude` | string[] | `[]` | Glob patterns to override global exclusions for this plugin |
 
-## Test fixtures
+## Resolution semantics
 
-The package ships three tiers of test fixtures, in line with section 8.7 of the workspace integration plan:
+- `from .module import x` resolves relative to the importer file. `from ..pkg import y` walks two directories up.
+- Bare absolute imports (`from foo.bar import baz`) return both `foo/bar.py` and `foo/bar/__init__.py` as candidates; existence is checked by the host application.
+- Each captured class base also emits an `extends` reference. Calls produce `calls` references on the enclosing function/method.
 
-- **`tests/fixtures/simple/cli.py`** — a small typed CLI module exercising functions, a `Greeter` class with `__init__`, a couple of constants and stdlib imports.
-- **`tests/fixtures/medium/cache.py`** — a richer module that exercises `dataclass`, abstract base classes, generics (`TypeVar`), a custom decorator, async methods, and `__all__` exports.
-- **`tests/fixtures/complex/click-8.4.1/`** — a 17-file, ~393 KB verbatim snapshot of [`pallets/click`](https://github.com/pallets/click) `src/click/`, pinned at `8.4.1`, BSD-3-Clause-licensed. Provenance and per-file SHA-256 hashes are recorded in [`ATTRIBUTION.md`](./tests/fixtures/complex/click-8.4.1/ATTRIBUTION.md). The complex tier guards against regressions on real-world Python with deep class hierarchies (`BaseCommand` → `Command` → `Group`), heavy decorator usage, and a wide exception subtype tree.
+## License
 
-### Class heritage extraction
-
-Class bases are extracted from `class Foo(Base1, Base2[K, V], pkg.Mod.Base3, metaclass=Meta)` clauses. The extractor:
-
-- Records `Base1` (plain `identifier`).
-- Unwraps `Base2[K, V]` (a `subscript`) to `Base2`, dropping the type arguments. Nested generics (`Base[K, list[V]]`) collapse to the outermost name.
-- Records `pkg.Mod.Base3` verbatim (a `dotted_name` / `attribute`).
-- Ignores `metaclass=Meta` (a `keyword_argument`).
-
-Each captured base also emits an `extends` reference from the subclass to the base name.
+MIT — see [LICENSE](./LICENSE).
