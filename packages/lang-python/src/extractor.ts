@@ -212,9 +212,12 @@ export class PythonExtractor implements LanguageExtractor {
       ?? node.namedChildren.find((c) => c.type === "argument_list");
     if (superclassNode) {
       for (const arg of superclassNode.namedChildren) {
-        if (arg.type === "identifier" || arg.type === "dotted_name" || arg.type === "attribute") {
-          bases.push(arg.text);
-        }
+        // Skip keyword arguments such as `metaclass=Meta`. Everything else is
+        // either a positional base type or something we explicitly recognise
+        // and unwrap below.
+        if (arg.type === "keyword_argument") continue;
+        const baseName = this.unwrapBase(arg);
+        if (baseName) bases.push(baseName);
       }
     }
 
@@ -259,6 +262,34 @@ export class PythonExtractor implements LanguageExtractor {
           this.extractClass(child, symbols, references, moduleName, filePath);
         }
       }
+    }
+  }
+
+  /**
+   * Reduce a class-base argument node to its bare type name.
+   *
+   * Tree-sitter-python represents the heritage list as an `argument_list`
+   * whose children are the individual base expressions. Plain inheritance
+   * yields `identifier` / `dotted_name` / `attribute` nodes (e.g. `ABC`,
+   * `typing.Generic`, `pkg.mod.Base`). Parameterised bases such as
+   * `Cache[K, V]` or `Generic[K, V]` arrive as `subscript` nodes whose
+   * `value` field is the actual type expression; we recurse on `value`
+   * so that nested generics (e.g. `Mapping[K, list[V]]`) and attribute
+   * subscripts (e.g. `typing.Generic[K, V]`) all collapse to the bare
+   * type name.
+   */
+  private unwrapBase(node: SyntaxNode): string | null {
+    switch (node.type) {
+      case "identifier":
+      case "dotted_name":
+      case "attribute":
+        return node.text;
+      case "subscript": {
+        const value = node.childForFieldName("value") ?? node.namedChildren[0];
+        return value ? this.unwrapBase(value) : null;
+      }
+      default:
+        return null;
     }
   }
 

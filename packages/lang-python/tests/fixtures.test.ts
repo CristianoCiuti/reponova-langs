@@ -77,20 +77,23 @@ describe("medium/cache.py fixture", () => {
     expect(stats).toBeDefined();
     expect(stats?.docstring).toBe("Hit / miss counters for diagnostics.");
 
-    // Plain identifier bases ARE extracted (`ABC` here).
+    // Plain identifier bases are extracted (`ABC` here) and parameterised
+    // bases (`Generic[K, V]`) collapse to their bare type name (`Generic`).
     const cacheClass = result.symbols.find((s) => s.name === "Cache" && s.kind === "class");
     expect(cacheClass?.bases).toContain("ABC");
+    expect(cacheClass?.bases).toContain("Generic");
 
-    // The class is recognised, even though its parameterised bases
-    // (`Cache[K, V]`, `Generic[K, V]`) are not — see the "known limitation"
-    // note below.
+    // Subscripted bases on subclasses now resolve to the underlying class
+    // name: `class InMemoryCache(Cache[K, V])` → `Cache`.
     const inMem = result.symbols.find((s) => s.name === "InMemoryCache");
     expect(inMem).toBeDefined();
     expect(inMem?.kind).toBe("class");
+    expect(inMem?.bases).toContain("Cache");
 
     const facade = result.symbols.find((s) => s.name === "AsyncCacheFacade");
     expect(facade).toBeDefined();
     expect(facade?.kind).toBe("class");
+    expect(facade?.bases).toContain("Generic");
 
     const factory = result.symbols.find((s) => s.name === "make_default_cache" && s.kind === "function");
     expect(factory).toBeDefined();
@@ -106,20 +109,27 @@ describe("medium/cache.py fixture", () => {
     expect(importedModules).toContain("typing");
   });
 
-  it("known limitation: subscripted generic bases (`Cache[K, V]`) are not yet captured", async () => {
-    // The current Python extractor only records bases whose AST node type
-    // is `identifier`, `dotted_name`, or `attribute`. Subscript expressions
-    // like `Cache[K, V]` or `Generic[K, V]` are skipped. This test pins
-    // the current behaviour so a future enhancement can flip it.
+  it("subscripted generic bases collapse to bare type names + ignore keyword args", async () => {
+    // Regression guard for the v0.2.x fix that taught the extractor to
+    // recurse into `subscript` AST nodes when collecting class heritage.
+    // The expectations here pin both sides of that change:
+    //   1. `class Cache(ABC, Generic[K, V])` keeps `ABC` AND now also
+    //      records `Generic` (via subscript unwrap).
+    //   2. `class InMemoryCache(Cache[K, V])` records `Cache` (was [] before).
+    //   3. `class AsyncCacheFacade(Generic[K, V])` records `Generic`.
+    //   4. Keyword arguments like `metaclass=Meta` continue to be ignored.
     const source = loadFixture(packageRoot, "medium/cache.py");
     const tree = await parse(source);
     const result = new PythonExtractor().extract(tree, source, "medium/cache.py");
 
+    const cacheClass = result.symbols.find((s) => s.name === "Cache" && s.kind === "class");
+    expect(cacheClass?.bases).toEqual(["ABC", "Generic"]);
+
     const inMem = result.symbols.find((s) => s.name === "InMemoryCache");
-    expect(inMem?.bases ?? []).toEqual([]);
+    expect(inMem?.bases).toEqual(["Cache"]);
 
     const facade = result.symbols.find((s) => s.name === "AsyncCacheFacade");
-    expect(facade?.bases ?? []).toEqual([]);
+    expect(facade?.bases).toEqual(["Generic"]);
   });
 });
 
