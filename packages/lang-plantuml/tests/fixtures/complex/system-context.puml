@@ -1,0 +1,47 @@
+@startuml
+title C4 — System Context: Booking platform
+
+!define DEVICONS https://raw.githubusercontent.com/tupadr3/plantuml-icon-font-sprites/master/devicons
+!define ICONURL https://raw.githubusercontent.com/tupadr3/plantuml-icon-font-sprites/master/icons
+
+actor "Customer" as cust
+actor "Hotel Manager" as host
+actor "Support Agent" as agent
+
+rectangle "Booking Platform" as platform {
+    component "Web App"      as web
+    component "Mobile App"   as mob
+    component "Backoffice"   as back
+    component "Booking API"  as api
+    database  "Bookings DB"  as db
+}
+
+rectangle "External" {
+    component "Payment Gateway" as psp
+    component "Email Service"   as mail
+    component "Map Provider"    as maps
+    component "Identity Provider" as idp
+}
+
+cust  --> web  : search & book
+cust  --> mob  : search & book
+host  --> back : manage rooms
+agent --> back : assist customers
+
+web  --> api
+mob  --> api
+back --> api
+api  --> db
+api  --> psp  : charge / refund
+api  --> mail : confirmations
+api  --> maps : geocoding
+api  --> idp  : SSO
+
+note bottom
+  Ownership boundary: the platform
+  controls everything in the inner
+  rectangle. External services are
+  reached via documented contracts.
+end note
+
+@enduml

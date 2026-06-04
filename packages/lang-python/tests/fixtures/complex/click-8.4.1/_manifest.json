@@ -1,0 +1,93 @@
+{
+  "upstream": "https://github.com/pallets/click",
+  "ref": "8.4.1",
+  "license": "BSD-3-Clause",
+  "copyright": "Copyright 2014 Pallets",
+  "files": [
+    {
+      "path": "src/click/__init__.py",
+      "sha256": "1487767d7092241df27960fe7b6b8e37e9818456b661cf4cbd71a61eef0e5c6d",
+      "size": 4634
+    },
+    {
+      "path": "src/click/_compat.py",
+      "sha256": "5cad70a2a0523d16f528d0305b056c48c7c49bc6657c3c010a371e5b34869846",
+      "size": 18910
+    },
+    {
+      "path": "src/click/_termui_impl.py",
+      "sha256": "54dc96636ee99b4254ab5d962bffe924d631794a03c9f370604804eafcff7273",
+      "size": 30411
+    },
+    {
+      "path": "src/click/_textwrap.py",
+      "sha256": "ed9d0ded59a7fbae933524d4c29e8e5c96dc5174666044fd87d736b9c0fca104",
+      "size": 6270
+    },
+    {
+      "path": "src/click/_utils.py",
+      "sha256": "782642b7026db180f941892435627c318ffc001223cbc31cce030cc95637dab4",
+      "size": 996
+    },
+    {
+      "path": "src/click/_winconsole.py",
+      "sha256": "292c5f35b3256116ba18e26e08b82c8363dbddd56480934fa8b24f69ef8f6b5d",
+      "size": 8543
+    },
+    {
+      "path": "src/click/core.py",
+      "sha256": "090689d002f0e33cb2569e84ee03fa6bf1bcf1e8ae5c4f6607316720943e8a06",
+      "size": 137917
+    },
+    {
+      "path": "src/click/decorators.py",
+      "sha256": "c6047cbd90029615959338ad3f6da4ea311315184aada961f35cef03af42b1dd",
+      "size": 18467
+    },
+    {
+      "path": "src/click/exceptions.py",
+      "sha256": "1498ad0dde8c4992e3e82b4a416a644331e77ec530dd4ca9c43534b7be9b9f47",
+      "size": 11294
+    },
+    {
+      "path": "src/click/formatting.py",
+      "sha256": "afa9062e93f21740af6bab924f0499ffc38d444ee3a7ddc8d42d0955161012a1",
+      "size": 10370
+    },
+    {
+      "path": "src/click/globals.py",
+      "sha256": "80cf8d87a0383341c1fd2824685e4ce2770618c0c773f7e51d7bbdfe88781845",
+      "size": 1923
+    },
+    {
+      "path": "src/click/parser.py",
+      "sha256": "a09f9f53fde6bf1ba022e36d1da0804d9e7a9601261d18208c9892a84818ae30",
+      "size": 19052
+    },
+    {
+      "path": "src/click/shell_completion.py",
+      "sha256": "4317856f745aa4d48ff19c2f2b6043548da3ac4292d516c969eb8532b1c90275",
+      "size": 21748
+    },
+    {
+      "path": "src/click/termui.py",
+      "sha256": "85f959fed2bb3f8594bff79ffd155544bee7d2744f8530f4c0dd2990713b843a",
+      "size": 33000
+    },
+    {
+      "path": "src/click/testing.py",
+      "sha256": "d24fefe41cbfe593b631c8c14fb953a90e7b5bc409b96d3fe52c7b77664b29e7",
+      "size": 25717
+    },
+    {
+      "path": "src/click/types.py",
+      "sha256": "522544c74ca842dad63b6c07db6360304e0b7c3c4c3508bc8f5aad26ea58229c",
+      "size": 42783
+    },
+    {
+      "path": "src/click/utils.py",
+      "sha256": "62c4cdac28447f00d7977f424c2ff25a743e655919c588c51124427c4802958e",
+      "size": 20386
+    }
+  ]
+}

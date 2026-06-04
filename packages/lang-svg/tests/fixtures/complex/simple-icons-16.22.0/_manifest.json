@@ -1,0 +1,383 @@
+{
+  "upstream": "https://github.com/simple-icons/simple-icons",
+  "ref": "16.22.0",
+  "license": "CC0-1.0",
+  "copyright": "Public Domain (CC0). Brand names remain trademarks of their respective owners; the SVG glyphs themselves are dedicated to the public domain.",
+  "files": [
+    {
+      "path": "icons/angular.svg",
+      "sha256": "385c7d047cc4d48d8359003b57ce4df7d1271b6d9e7840c128628ac582c90456",
+      "size": 298
+    },
+    {
+      "path": "icons/apache.svg",
+      "sha256": "b6f98b799dbc23a0b3e3cf60a9508bcf11c58cbb8830762e942ff995adce93fc",
+      "size": 2824
+    },
+    {
+      "path": "icons/apple.svg",
+      "sha256": "2a1509dccd25e6d2bc7a11a8e52941077e1a48555e192ce638699b9f083c2a7c",
+      "size": 650
+    },
+    {
+      "path": "icons/arduino.svg",
+      "sha256": "e3e0b836d682159a1d0660e3081527fca03bf767202dff3bdebea3593fd7e77a",
+      "size": 964
+    },
+    {
+      "path": "icons/babel.svg",
+      "sha256": "14272cc15d2c2b4df0767dd95b6017efc674ee32d3a37c65379350682d0cbf96",
+      "size": 3935
+    },
+    {
+      "path": "icons/blender.svg",
+      "sha256": "ec86e2c9cf9fc25f5c8d3bf2e8d201c0dce6683137f37a1e61f992da6566bff5",
+      "size": 1294
+    },
+    {
+      "path": "icons/bootstrap.svg",
+      "sha256": "6a86e8f3f371e6d24b52e5280b164198fb3e56f6b5a28ddb7780dc1eaa812d07",
+      "size": 854
+    },
+    {
+      "path": "icons/cplusplus.svg",
+      "sha256": "adf33f5026f3f70d54f1068cb5d1a790c37b2105cbe728edd170251759d13f18",
+      "size": 764
+    },
+    {
+      "path": "icons/circleci.svg",
+      "sha256": "870bee0dae492b875ef775483bcc806de8785f393e71350b3de69196708a10fa",
+      "size": 638
+    },
+    {
+      "path": "icons/clickhouse.svg",
+      "sha256": "9fa7c12613763111ca26bbc1fe10994960028bc3da9faf47247de231a0b27589",
+      "size": 246
+    },
+    {
+      "path": "icons/css.svg",
+      "sha256": "9a97b95e3207aa4a6545dbb862e22450a01f37201c00e6b7d9c2958b59ca9ff9",
+      "size": 1479
+    },
+    {
+      "path": "icons/d3.svg",
+      "sha256": "45758d597899dd064a6bde27bcb3d4ab0e3615053d954e8c28b8f50170f79868",
+      "size": 624
+    },
+    {
+      "path": "icons/dart.svg",
+      "sha256": "e02868488ff4ac8e8b22440c6b021e6539f9df21271e0ffb8a7bf92ada0126bb",
+      "size": 506
+    },
+    {
+      "path": "icons/debian.svg",
+      "sha256": "8835536d63c80990f9c90c935982ba329d163e707c894278ca6bd73258d1962b",
+      "size": 2802
+    },
+    {
+      "path": "icons/deno.svg",
+      "sha256": "cc9065552101a5e8662ff0d380ab81dc9135de13930a6a2c536b5577931adef7",
+      "size": 1037
+    },
+    {
+      "path": "icons/discord.svg",
+      "sha256": "1d364b72c9eaf1fe37d17ca88cd8fb541308dc0f3b09e2ab3b824f380b3493d5",
+      "size": 1374
+    },
+    {
+      "path": "icons/django.svg",
+      "sha256": "2dd3c936adb3683b01c3d35fe389da97813ed9782b9d01a924212d2e21ce8816",
+      "size": 581
+    },
+    {
+      "path": "icons/docker.svg",
+      "sha256": "65571291c261ef869c31540a38f3ca0f0ee3bb73f179c172211c8860f19a6359",
+      "size": 1765
+    },
+    {
+      "path": "icons/dotnet.svg",
+      "sha256": "3b7e1243fb2389116b0a5237c9f07e82f6d2eb18ee40bd232f28abccd7956993",
+      "size": 534
+    },
+    {
+      "path": "icons/electron.svg",
+      "sha256": "fdf1b8ce32ada155bd490c9da008974af47fa808177e219d449d1d091f0f1d4e",
+      "size": 2516
+    },
+    {
+      "path": "icons/elixir.svg",
+      "sha256": "d660279eaad792683d6e8cee70b225935e856f6b7aae4327d30f4a7f69e71c34",
+      "size": 370
+    },
+    {
+      "path": "icons/eslint.svg",
+      "sha256": "6da8751e228367945e707607d0818db23848fa52e2992d22aecffd66f7124bbe",
+      "size": 743
+    },
+    {
+      "path": "icons/express.svg",
+      "sha256": "eb1d75ebfd1a8e75c888fe8d8e94214dd4a5380e847cc88eea552526af1e5edd",
+      "size": 773
+    },
+    {
+      "path": "icons/fastapi.svg",
+      "sha256": "af0bdd5fd3f16a49e341089049418af7b02a04eefdc088b2e26c4524fa8b75d1",
+      "size": 347
+    },
+    {
+      "path": "icons/figma.svg",
+      "sha256": "2f86fca501dfed321a62f28743f29d9dd738dac91668eac5260ab746d1ef8840",
+      "size": 1093
+    },
+    {
+      "path": "icons/firebase.svg",
+      "sha256": "3f46d84a41479d7789cc36b82c2b6852e6bbbfd30ebee5b7a3aef7d49758295a",
+      "size": 1927
+    },
+    {
+      "path": "icons/firefox.svg",
+      "sha256": "819fc94c6ce1dfa1874f069c88ff9d666fb4ce669e23781ec8dbf163a5a012e2",
+      "size": 1016
+    },
+    {
+      "path": "icons/flask.svg",
+      "sha256": "645c60732f945289a00d0640d8d682b7160a44b21b527633cab72175e919aeab",
+      "size": 851
+    },
+    {
+      "path": "icons/gatsby.svg",
+      "sha256": "76d11eb40de10f66a386b902def9984038e0db66becde77e03d50036524512f0",
+      "size": 510
+    },
+    {
+      "path": "icons/git.svg",
+      "sha256": "95724d436215d483de82288610c3c144854138f49945424697fcdf8be66e17d6",
+      "size": 426
+    },
+    {
+      "path": "icons/github.svg",
+      "sha256": "3bf8cceead820aec50d4ee825a3fd02c5a1cd6665cc9cf4cbf3d9c8861a204bb",
+      "size": 822
+    },
+    {
+      "path": "icons/gitlab.svg",
+      "sha256": "c7c39058bd1b6f9f40334383bd5136bb8c5ba5e6a24200f2d1f18365e2526e28",
+      "size": 573
+    },
+    {
+      "path": "icons/go.svg",
+      "sha256": "36a745fe15584bf138d02ae6abcbdd155bc1cd4f4976634ad34861b2059db559",
+      "size": 1636
+    },
+    {
+      "path": "icons/googlechrome.svg",
+      "sha256": "ce2ff9d2a010ed24f821ef34e40dc125d2bdf1dd28f42ded7b6017585b73c1dd",
+      "size": 535
+    },
+    {
+      "path": "icons/gradle.svg",
+      "sha256": "1ae785093daee910b4bc6ee351742976e441dfcd9bdb13e82a88c0c0ef37022e",
+      "size": 911
+    },
+    {
+      "path": "icons/graphql.svg",
+      "sha256": "fc8ca4d195a8a79470540edf33677e24f6113b8b8d9b442acc5f62b57a2951cb",
+      "size": 666
+    },
+    {
+      "path": "icons/haskell.svg",
+      "sha256": "46f753c4116bdbfd1e478c5c3101b969e5a8b9f472969b74346d67c6f2975847",
+      "size": 310
+    },
+    {
+      "path": "icons/helm.svg",
+      "sha256": "966f1f065a68819418daf146f4ef1acf20f96c3d33ea9ec8bb92ecdb553dac4e",
+      "size": 1519
+    },
+    {
+      "path": "icons/html5.svg",
+      "sha256": "dfd65fdd7e4f997c6b163e48793de5ad18c4c99e191807a61752ea702f123d1d",
+      "size": 327
+    },
+    {
+      "path": "icons/javascript.svg",
+      "sha256": "c9be35a7a861ebe80ae4ee706d05004b99ee59fc63db69da6dcc10776718434b",
+      "size": 974
+    },
+    {
+      "path": "icons/jenkins.svg",
+      "sha256": "95ab5d541710c116d939f44e4e72c8b1503e78d04a1c298ad257c4e26d3a1873",
+      "size": 4668
+    },
+    {
+      "path": "icons/jest.svg",
+      "sha256": "531ee43921c1895fbe6a6554bb774fc07f077ec122b734c1452af8ec77141954",
+      "size": 2700
+    },
+    {
+      "path": "icons/jira.svg",
+      "sha256": "68f8703698538ee7863bf69b72bf9f0d78a72d218e7eb7e0617237ae43ae5ade",
+      "size": 478
+    },
+    {
+      "path": "icons/jquery.svg",
+      "sha256": "a2eda71cd3e61835fc8ddadad59096089cb41761f341ea05a1aca3718966a932",
+      "size": 3349
+    },
+    {
+      "path": "icons/julia.svg",
+      "sha256": "d7471ddca5a25f72c43f433726b00c324175f0fe1b80011ff3e77e750f273f9d",
+      "size": 311
+    },
+    {
+      "path": "icons/jupyter.svg",
+      "sha256": "46e1e4fe83ba623803dfbfe8714a31ea902178421624dc3de427aae8325b9dba",
+      "size": 899
+    },
+    {
+      "path": "icons/kotlin.svg",
+      "sha256": "909d1ba63b4bea5843be4579fa68a398c310c3d4748e8e6ba9ea295403984b3b",
+      "size": 130
+    },
+    {
+      "path": "icons/kubernetes.svg",
+      "sha256": "ceee2f4e87fa1533600672190c156194039f744fa9b5da10e83f002178e84b47",
+      "size": 3565
+    },
+    {
+      "path": "icons/laravel.svg",
+      "sha256": "9d0bb8aa3a9fc069dcc3d92c398a90be3a75fd1b0167b91f56939a18109e9796",
+      "size": 1860
+    },
+    {
+      "path": "icons/lerna.svg",
+      "sha256": "8ea68565c349d8b6ae321f9a4f99484d58aee55b23f1c0bff5384ba7b211714e",
+      "size": 1123
+    },
+    {
+      "path": "icons/lit.svg",
+      "sha256": "3ef2840e11e436831aa0af74cad172577fd655f6b0a041a632e4b9e3c6f9f1ed",
+      "size": 234
+    },
+    {
+      "path": "icons/lua.svg",
+      "sha256": "ea6e362187dd07d589930f3bb12e5c624253c60767a554d9ecbea4585cc29a60",
+      "size": 4109
+    },
+    {
+      "path": "icons/mariadb.svg",
+      "sha256": "477435746bb2024048c7b71529f615fb70d7e679618f37bac49f78fd07e67dfe",
+      "size": 1373
+    },
+    {
+      "path": "icons/markdown.svg",
+      "sha256": "fac4fe3491647608362095b4b44d8bb8c45a37231a31309d435bf2e7592ac1e1",
+      "size": 401
+    },
+    {
+      "path": "icons/mui.svg",
+      "sha256": "af7721bc4b663e02001d72dbd018b083fbbf6084b37f62acb03927a93b61a5e0",
+      "size": 1560
+    },
+    {
+      "path": "icons/mocha.svg",
+      "sha256": "b29212a849dfbe175b3475efb8827c902f46faf3848a4e105c800ce115ca1506",
+      "size": 919
+    },
+    {
+      "path": "icons/mongodb.svg",
+      "sha256": "6698757ee85997e8167b2eacaff8395d6987954185488f2e90b88ef387fec6c7",
+      "size": 527
+    },
+    {
+      "path": "icons/mysql.svg",
+      "sha256": "67c144cc3e44ad14062a3f20ebe29c5e7eeb2c2c9c0f43cf48d87fe6291a8b2d",
+      "size": 3625
+    },
+    {
+      "path": "icons/netlify.svg",
+      "sha256": "adbe4ef3579ca1ef95e1903ff8599a5a55e5c6531fab3f7edaf2b4adee0f4ef9",
+      "size": 656
+    },
+    {
+      "path": "icons/nextdotjs.svg",
+      "sha256": "593e14da3ddb65be4c8fa6a178f2f48a01a8bd39ea384f679cd7182b520da502",
+      "size": 322
+    },
+    {
+      "path": "icons/nginx.svg",
+      "sha256": "236d53b2b746706df75e2a01668cb84e6f3fc7c8923a9ce824f8534db007a438",
+      "size": 413
+    },
+    {
+      "path": "icons/nodedotjs.svg",
+      "sha256": "021851b758cde7d3e04819c3ac02047d0ff281c712e8387afa0c76a6dac6db6c",
+      "size": 1608
+    },
+    {
+      "path": "icons/npm.svg",
+      "sha256": "00b410dc2c839cfa62910a065eaf28a48cbdb4babe503cf34d475cc94ba03be1",
+      "size": 317
+    },
+    {
+      "path": "icons/perl.svg",
+      "sha256": "6f1d3f3ac779079b0306437550cf1bc7532e1aa161ddf5934e8f109d006a7fca",
+      "size": 1399
+    },
+    {
+      "path": "icons/php.svg",
+      "sha256": "cd1beaa0dde7e765b5d2cbae786c1f6db967f72073eb7b9f9bbc63da55b9d0f6",
+      "size": 1127
+    },
+    {
+      "path": "icons/postgresql.svg",
+      "sha256": "c8ccadbd88c9312c2ad3734c4861b31d3485ce179ee91d64793143f83cfa745c",
+      "size": 5205
+    },
+    {
+      "path": "icons/prettier.svg",
+      "sha256": "f415af9c09c4a2088938405b8537081a440fe2f881f6e6d16b0365c6aeaf8c1d",
+      "size": 1816
+    },
+    {
+      "path": "icons/python.svg",
+      "sha256": "ad9468e1c4903f73ae7eebfbe980f0f727a10db695be3d914e7d8bd25356a862",
+      "size": 1518
+    },
+    {
+      "path": "icons/react.svg",
+      "sha256": "ab9136a1a4a8be72ac6743e1bdd1912d878bd68d57787ea7a6c6838e3b23c01c",
+      "size": 2926
+    },
+    {
+      "path": "icons/redis.svg",
+      "sha256": "428b86deb14c8bdacdcdf75987fe454f367bcd078a7e4ae3f84de29aa5bdf136",
+      "size": 738
+    },
+    {
+      "path": "icons/redux.svg",
+      "sha256": "deb8a2ce3bca057d0f9b94c3a0d30f2e5f7d637e5369e08ddbc6c5dd4205569b",
+      "size": 1429
+    },
+    {
+      "path": "icons/ruby.svg",
+      "sha256": "956992a81b988b916efdd6f7a78b9f19fe352b5c04f2019af2ce1a89e390ac9d",
+      "size": 535
+    },
+    {
+      "path": "icons/rust.svg",
+      "sha256": "95a291d8887610d103704adcc5c5f2cbfa4c80a96f8e72b00531d5691beb67a8",
+      "size": 4244
+    },
+    {
+      "path": "icons/sass.svg",
+      "sha256": "0859123cfea9b1d4aa60714ebf5c758be760e2efa1b3944085fb105feeece9db",
+      "size": 1223
+    },
+    {
+      "path": "icons/scala.svg",
+      "sha256": "5202637eaff2e7362af3743313c21f6c074d4ff80ab6335ca5e87608b7a12a21",
+      "size": 376
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+@startuml
+title Order flow — checkout to fulfilment
+
+skinparam sequenceMessageAlign center
+
+actor Customer
+participant "Web UI" as UI
+participant "Order API" as API
+participant "Payment Gateway" as PSP
+participant "Inventory" as INV
+participant "Email Service" as MAIL
+database "Postgres" as DB
+
+Customer -> UI : place order
+activate UI
+UI -> API : POST /orders
+activate API
+
+API -> DB : begin tx
+activate DB
+API -> INV : reserve(items)
+activate INV
+INV --> API : reserved
+deactivate INV
+
+alt payment authorised
+    API -> PSP : authorize(amount)
+    activate PSP
+    PSP --> API : approved(authId)
+    deactivate PSP
+    API -> DB : insert order(authId)
+    DB --> API : ok
+    API -> DB : commit
+    deactivate DB
+    API -> MAIL : sendConfirmation(orderId)
+    activate MAIL
+    MAIL --> API : queued
+    deactivate MAIL
+    API --> UI : 201 Created
+else payment refused
+    PSP --> API : declined
+    API -> INV : release(items)
+    API -> DB : rollback
+    API --> UI : 402 Payment Required
+end
+
+deactivate API
+UI --> Customer : show receipt
+deactivate UI
+
+note right of API
+  Idempotency key on the
+  POST /orders endpoint
+  guards against retries.
+end note
+
+@enduml

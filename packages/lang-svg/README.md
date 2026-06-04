@@ -37,3 +37,11 @@ plugins:
 | `parse` | boolean | `true` | Parse SVG content to extract text elements |
 | `patterns` | string[] | `[]` | Glob patterns to override global file matching for this plugin |
 | `exclude` | string[] | `[]` | Glob patterns to override global exclusions for this plugin |
+
+## Test fixtures
+
+The package ships three tiers of test fixtures, in line with section 8.7 of the workspace integration plan:
+
+- **`tests/fixtures/simple/layout.svg`** — a 3-tier layout SVG with three labelled boxes.
+- **`tests/fixtures/medium/dashboard.svg`** — a richer "Operations Dashboard" mock with gradients, filters, patterns, and ~10 distinct text labels.
+- **`tests/fixtures/complex/simple-icons-16.22.0/`** — a 75-icon, ~97 KB curated subset of [`simple-icons/simple-icons`](https://github.com/simple-icons/simple-icons), pinned at `16.22.0`, CC0-1.0 (public domain). Provenance and per-file SHA-256 hashes are recorded in [`ATTRIBUTION.md`](./tests/fixtures/complex/simple-icons-16.22.0/ATTRIBUTION.md). Most icons are pure path glyphs without `<text>` elements; the complex tier exists primarily to confirm that the extractor handles every glyph without throwing.

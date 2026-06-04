@@ -1,0 +1,18 @@
+@startuml
+title Authentication subsystem
+
+class User
+class Session
+class Token
+abstract class Identity
+
+User --> Session
+Session --> Token
+User ..|> Identity
+
+note right of Token
+  Short-lived JWT.
+  Rotated by Session on expiry.
+end note
+
+@enduml

@@ -1,0 +1,46 @@
+@startuml
+title Order lifecycle — state machine
+
+[*] --> Draft : create
+
+state Draft {
+    [*] --> Empty
+    Empty --> WithItems : addItem
+    WithItems --> Empty : removeLastItem
+    WithItems --> WithItems : updateItem
+}
+
+Draft --> AwaitingPayment : checkout
+
+state AwaitingPayment {
+    state "Authorising" as A
+    state "Refused" as R
+    [*] --> A
+    A --> R : decline
+    R --> A : retry (max 3)
+}
+
+AwaitingPayment --> Paid : authorise
+AwaitingPayment --> Cancelled : timeout / refused (3x)
+
+state Paid {
+    state Picking
+    state Packed
+    state Shipped
+
+    [*] --> Picking
+    Picking --> Packed : packComplete
+    Packed --> Shipped : handover
+}
+
+Paid --> Delivered : courierConfirms
+Delivered --> Closed : after 30d
+Cancelled --> [*]
+Closed --> [*]
+
+note right of AwaitingPayment
+  Idempotent retries are
+  guarded by the PSP nonce.
+end note
+
+@enduml
