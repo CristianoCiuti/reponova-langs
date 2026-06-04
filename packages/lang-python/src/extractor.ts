@@ -1,8 +1,9 @@
 /**
  * Python language extractor.
  *
- * Extracts functions, classes, methods, imports, and call references from Python
- * source code using tree-sitter AST parsing.
+ * Extracts functions, classes, methods, imports, calls, type aliases,
+ * `TypeVar` / `NewType` / `ParamSpec` symbols, and conditional-block
+ * imports from Python source code using tree-sitter AST parsing.
  */
 import type {
   LanguageExtractor,
@@ -16,7 +17,19 @@ import type {
 } from "reponova";
 import { dirname, join } from "node:path";
 
-type SymbolKind = "function" | "class" | "method" | "variable" | "constant" | "interface" | "enum" | "module" | "document" | "section" | "component";
+type SymbolKind =
+  | "function"
+  | "class"
+  | "method"
+  | "variable"
+  | "constant"
+  | "interface"
+  | "enum"
+  | "module"
+  | "document"
+  | "section"
+  | "component"
+  | "type";
 
 // ─── Path helpers (inlined to avoid depending on reponova internals) ─────────
 
@@ -29,6 +42,31 @@ function posixBasename(p: string): string {
   const lastSlash = normalized.lastIndexOf("/");
   return lastSlash === -1 ? normalized : normalized.slice(lastSlash + 1);
 }
+
+/**
+ * Tree-sitter-python container node types whose body contains further
+ * statements that should be treated as if they were at the same scope as
+ * the parent for extraction purposes.
+ *
+ * The most important real-world cases are:
+ *   - `if TYPE_CHECKING:` blocks for runtime-free type imports.
+ *   - `try: import x ; except ImportError: import alt as x` for soft deps.
+ *
+ * We descend through both control-flow scaffolding (`if_statement`,
+ * `else_clause`, etc.) and the inner `block` node that actually carries
+ * the statement list.
+ */
+const STATEMENT_CONTAINERS = new Set([
+  "module",
+  "if_statement",
+  "elif_clause",
+  "else_clause",
+  "try_statement",
+  "except_clause",
+  "except_group_clause",
+  "finally_clause",
+  "block",
+]);
 
 export class PythonExtractor implements LanguageExtractor {
   readonly languageId = "python";
@@ -49,32 +87,9 @@ export class PythonExtractor implements LanguageExtractor {
       docstring: this.extractModuleDocstring(tree),
     };
 
-    for (const child of tree.rootNode.namedChildren) {
-      switch (child.type) {
-        case "import_statement":
-          imports.push(this.extractImport(child));
-          break;
-        case "import_from_statement":
-          imports.push(this.extractFromImport(child));
-          break;
-        case "function_definition":
-          this.extractFunction(child, symbols, references, moduleName, filePath);
-          break;
-        case "class_definition":
-          this.extractClass(child, symbols, references, moduleName, filePath);
-          break;
-        case "decorated_definition":
-          this.extractDecorated(child, symbols, references, moduleName, filePath);
-          break;
-        case "expression_statement": {
-          const expr = child.namedChildren[0];
-          if (expr && expr.type === "assignment") {
-            this.extractAssignment(expr, symbols, moduleName);
-          }
-          break;
-        }
-      }
-    }
+    this.walkContainer(tree.rootNode, (child) => {
+      this.dispatchTopLevel(child, symbols, imports, references, moduleName, filePath);
+    });
 
     const isInit = filePath.endsWith("__init__.py") || filePath.endsWith("__init__");
     if (isInit) {
@@ -94,6 +109,65 @@ export class PythonExtractor implements LanguageExtractor {
     const parts = importModule.split(".");
     const basePath = parts.join("/");
     return [`${basePath}.py`, `${basePath}/__init__.py`];
+  }
+
+  // ─── Top-level dispatch ──────────────────────────────────────────────────
+
+  /**
+   * Walk a statement container and apply `action` to every direct
+   * statement child. Container nodes (if/try/else/except/finally and the
+   * inner `block`) are recursively descended so that imports and
+   * declarations buried inside `if TYPE_CHECKING:` or `try / except
+   * ImportError:` blocks are still surfaced at the module level.
+   */
+  private walkContainer(node: SyntaxNode, action: (stmt: SyntaxNode) => void): void {
+    for (const child of node.namedChildren) {
+      if (STATEMENT_CONTAINERS.has(child.type)) {
+        this.walkContainer(child, action);
+      } else {
+        action(child);
+      }
+    }
+  }
+
+  private dispatchTopLevel(
+    child: SyntaxNode,
+    symbols: SymbolNode[],
+    imports: ImportDeclaration[],
+    references: SymbolReference[],
+    moduleName: string,
+    filePath: string,
+  ): void {
+    switch (child.type) {
+      case "import_statement":
+        imports.push(this.extractImport(child));
+        return;
+      case "import_from_statement":
+        imports.push(this.extractFromImport(child));
+        return;
+      case "future_import_statement":
+        imports.push(this.extractFutureImport(child));
+        return;
+      case "function_definition":
+        this.extractFunction(child, symbols, references, moduleName, filePath);
+        return;
+      case "class_definition":
+        this.extractClass(child, symbols, references, moduleName, filePath);
+        return;
+      case "decorated_definition":
+        this.extractDecorated(child, symbols, references, moduleName, filePath);
+        return;
+      case "type_alias_statement":
+        this.extractPep695TypeAlias(child, symbols, moduleName);
+        return;
+      case "expression_statement": {
+        const expr = child.namedChildren[0];
+        if (expr && expr.type === "assignment") {
+          this.extractAssignment(expr, symbols, moduleName);
+        }
+        return;
+      }
+    }
   }
 
   // ─── Import Extraction ───────────────────────────────────────────────────
@@ -116,6 +190,30 @@ export class PythonExtractor implements LanguageExtractor {
     }
 
     return { module, names, isWildcard: false, line: node.startPosition.row + 1 };
+  }
+
+  /**
+   * `from __future__ import annotations` is parsed by tree-sitter-python as
+   * `future_import_statement`, distinct from a regular `import_from_statement`.
+   * We surface it under the synthetic module name `__future__` so that
+   * downstream tooling sees the directive uniformly with other imports.
+   */
+  private extractFutureImport(node: SyntaxNode): ImportDeclaration {
+    const names: string[] = [];
+    for (const child of node.namedChildren) {
+      if (child.type === "dotted_name") {
+        names.push(child.text);
+      } else if (child.type === "aliased_import") {
+        const nameNode = child.namedChildren[0];
+        if (nameNode) names.push(nameNode.text);
+      }
+    }
+    return {
+      module: "__future__",
+      names,
+      isWildcard: false,
+      line: node.startPosition.row + 1,
+    };
   }
 
   private extractFromImport(node: SyntaxNode): ImportDeclaration {
@@ -167,6 +265,10 @@ export class PythonExtractor implements LanguageExtractor {
     const docstring = this.extractDocstring(node);
     const calls = this.extractCalls(node);
 
+    const finalDecorators = this.isAsyncFunction(node)
+      ? ["async", ...decorators]
+      : decorators;
+
     const qualifiedName = parentClass
       ? `${moduleName}.${parentClass}.${name}`
       : `${moduleName}.${name}`;
@@ -176,7 +278,7 @@ export class PythonExtractor implements LanguageExtractor {
       qualifiedName,
       kind,
       signature,
-      decorators,
+      decorators: finalDecorators,
       docstring,
       startLine: node.startPosition.row + 1,
       endLine: node.endPosition.row + 1,
@@ -191,6 +293,18 @@ export class PythonExtractor implements LanguageExtractor {
         line: node.startPosition.row + 1,
       });
     }
+  }
+
+  /**
+   * `async def foo(...)`: tree-sitter-python attaches the `async` keyword
+   * as an anonymous child token of `function_definition`. We have to
+   * inspect `node.children` (not `namedChildren`) to see it.
+   */
+  private isAsyncFunction(node: SyntaxNode): boolean {
+    for (const child of node.children) {
+      if (child.type === "async") return true;
+    }
+    return false;
   }
 
   // ─── Class Extraction ────────────────────────────────────────────────────
@@ -212,9 +326,6 @@ export class PythonExtractor implements LanguageExtractor {
       ?? node.namedChildren.find((c) => c.type === "argument_list");
     if (superclassNode) {
       for (const arg of superclassNode.namedChildren) {
-        // Skip keyword arguments such as `metaclass=Meta`. Everything else is
-        // either a positional base type or something we explicitly recognise
-        // and unwrap below.
         if (arg.type === "keyword_argument") continue;
         const baseName = this.unwrapBase(arg);
         if (baseName) bases.push(baseName);
@@ -266,17 +377,10 @@ export class PythonExtractor implements LanguageExtractor {
   }
 
   /**
-   * Reduce a class-base argument node to its bare type name.
-   *
-   * Tree-sitter-python represents the heritage list as an `argument_list`
-   * whose children are the individual base expressions. Plain inheritance
-   * yields `identifier` / `dotted_name` / `attribute` nodes (e.g. `ABC`,
-   * `typing.Generic`, `pkg.mod.Base`). Parameterised bases such as
-   * `Cache[K, V]` or `Generic[K, V]` arrive as `subscript` nodes whose
-   * `value` field is the actual type expression; we recurse on `value`
-   * so that nested generics (e.g. `Mapping[K, list[V]]`) and attribute
-   * subscripts (e.g. `typing.Generic[K, V]`) all collapse to the bare
-   * type name.
+   * Reduce a class-base argument node to its bare type name. Supports
+   * plain identifiers, dotted names, attributes, and parameterised
+   * generics like `Cache[K, V]` / `typing.Generic[K, V]` / `Mapping[K,
+   * list[V]]` (which collapses to the outermost name).
    */
   private unwrapBase(node: SyntaxNode): string | null {
     switch (node.type) {
@@ -317,18 +421,125 @@ export class PythonExtractor implements LanguageExtractor {
 
   // ─── Assignment Extraction ───────────────────────────────────────────────
 
+  /**
+   * Capture three flavours of module-level assignment as graph symbols:
+   *
+   *   1. `K = TypeVar("K")` / `Foo = NewType("Foo", int)` /
+   *      `P = ParamSpec("P")` / `Ts = TypeVarTuple("Ts")` →
+   *      `kind: "type"` with the constructor name as a decorator
+   *      (`typevar`, `newtype`, `paramspec`, `typevartuple`). The
+   *      function may be qualified (`typing.TypeVar`, `t.TypeVar`).
+   *
+   *   2. `User = Dict[str, Any]` / `Ids = list[int]` / `T = A | B` →
+   *      `kind: "type"`, `decorators: ["alias"]`. The heuristic is
+   *      conservative: we only treat the assignment as a type alias when
+   *      the LHS is `PascalCase` (uppercase first letter, not all-caps,
+   *      no underscores between letters in the rest) and the RHS is a
+   *      `subscript`, a `generic_type`, or a PEP 604 union
+   *      (`binary_operator` over `|`). Lowercase names like `result =
+   *      mapping[key]` are intentionally NOT promoted.
+   *
+   *   3. `MAX_RETRIES = 3` / `LOG_LINE = "..."` → `kind: "constant"`
+   *      (legacy behaviour, preserved verbatim).
+   */
   private extractAssignment(node: SyntaxNode, symbols: SymbolNode[], moduleName: string): void {
     const left = node.childForFieldName("left");
     if (!left || left.type !== "identifier") return;
-
     const name = left.text;
-    if (!/^[A-Z][A-Z0-9_]*$/.test(name)) return;
+    const right = node.childForFieldName("right");
+
+    // 1. typing constructors
+    if (right && right.type === "call") {
+      const fnNode = right.childForFieldName("function");
+      const fnText = fnNode?.text ?? "";
+      const baseFn = fnText.includes(".") ? fnText.split(".").pop()! : fnText;
+      const TYPING_CTORS: Record<string, string> = {
+        TypeVar: "typevar",
+        NewType: "newtype",
+        ParamSpec: "paramspec",
+        TypeVarTuple: "typevartuple",
+      };
+      if (baseFn in TYPING_CTORS) {
+        symbols.push({
+          name,
+          qualifiedName: `${moduleName}.${name}`,
+          kind: "type",
+          decorators: [TYPING_CTORS[baseFn]!],
+          startLine: node.startPosition.row + 1,
+          endLine: node.endPosition.row + 1,
+        });
+        return;
+      }
+    }
+
+    // 2. UPPER_SNAKE_CASE constant — checked before the type-alias heuristic
+    //    so that a constant named `MAX_RETRIES = 3` is never mis-classified.
+    if (/^[A-Z][A-Z0-9_]*$/.test(name)) {
+      symbols.push({
+        name,
+        qualifiedName: `${moduleName}.${name}`,
+        kind: "constant",
+        decorators: [],
+        startLine: node.startPosition.row + 1,
+        endLine: node.endPosition.row + 1,
+      });
+      return;
+    }
+
+    // 3. Conservative type-alias heuristic
+    if (right && /^[A-Z][a-zA-Z0-9_]*$/.test(name) && this.looksLikeTypeAlias(right)) {
+      symbols.push({
+        name,
+        qualifiedName: `${moduleName}.${name}`,
+        kind: "type",
+        decorators: ["alias"],
+        startLine: node.startPosition.row + 1,
+        endLine: node.endPosition.row + 1,
+      });
+    }
+  }
+
+  /**
+   * RHS shape that we take to indicate a type-alias assignment.
+   *   - `subscript`        : `Dict[str, Any]`, `list[int]`
+   *   - `generic_type`     : annotated generic literal (rarely produced)
+   *   - PEP 604 union      : `binary_operator` over `|` between two type expressions
+   */
+  private looksLikeTypeAlias(rhs: SyntaxNode): boolean {
+    if (rhs.type === "subscript" || rhs.type === "generic_type") return true;
+    if (rhs.type === "binary_operator") {
+      for (const c of rhs.children) {
+        if (c.type === "|") return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * PEP 695 `type Foo = Dict[str, Any]` (Python 3.12+). tree-sitter-python
+   * exposes this as a top-level `type_alias_statement`. The first
+   * identifier child holds the alias name.
+   */
+  private extractPep695TypeAlias(
+    node: SyntaxNode,
+    symbols: SymbolNode[],
+    moduleName: string,
+  ): void {
+    const nameNode = node.namedChildren.find(
+      (c) => c.type === "type" || c.type === "identifier",
+    );
+    if (!nameNode) return;
+    // `type` nodes wrap an inner identifier in 0.25.x; both shapes appear
+    // depending on grammar version, so we unwrap one level if needed.
+    const inner = nameNode.namedChildren.find((c) => c.type === "identifier") ?? nameNode;
+    const name = inner.text;
+    if (!name) return;
 
     symbols.push({
       name,
       qualifiedName: `${moduleName}.${name}`,
-      kind: "constant",
-      decorators: [],
+      kind: "type",
+      decorators: ["pep695"],
       startLine: node.startPosition.row + 1,
       endLine: node.endPosition.row + 1,
     });
@@ -341,14 +552,16 @@ export class PythonExtractor implements LanguageExtractor {
   }
 
   private extractDunderAll(tree: SyntaxTree): string[] | null {
-    for (const child of tree.rootNode.namedChildren) {
-      if (child.type !== "expression_statement") continue;
+    let result: string[] | null = null;
+    this.walkContainer(tree.rootNode, (child) => {
+      if (result) return;
+      if (child.type !== "expression_statement") return;
       const expr = child.namedChildren[0];
-      if (!expr || expr.type !== "assignment") continue;
+      if (!expr || expr.type !== "assignment") return;
       const left = expr.childForFieldName("left");
-      if (!left || left.text !== "__all__") continue;
+      if (!left || left.text !== "__all__") return;
       const right = expr.childForFieldName("right");
-      if (!right || right.type !== "list") continue;
+      if (!right || right.type !== "list") return;
       const names: string[] = [];
       for (const element of right.namedChildren) {
         if (element.type === "string") {
@@ -356,9 +569,9 @@ export class PythonExtractor implements LanguageExtractor {
           if (text) names.push(text);
         }
       }
-      return names.length > 0 ? names : null;
-    }
-    return null;
+      if (names.length > 0) result = names;
+    });
+    return result;
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
