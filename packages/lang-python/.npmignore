@@ -1,0 +1,9 @@
+dist
+node_modules
+tests
+src
+tsconfig.json
+tsup.config.ts
+.gitignore
+.git
+.opencode
