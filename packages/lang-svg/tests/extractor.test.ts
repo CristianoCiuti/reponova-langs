@@ -97,4 +97,88 @@ describe("SvgExtractor.extract", () => {
     const sym = result.symbols[0];
     expect(sym?.qualifiedName).toBe("docs.ui.diagram.MyComponent");
   });
+
+  it("should extract multi-line text bodies and tspan children as a single label", () => {
+    // Real-world SVGs (Inkscape, hand-authored, Mermaid output) routinely
+    // line-break inside <text> with <tspan>. The previous regex
+    // [^<]+ stopped at the first `<` and silently dropped the whole
+    // element. The new normaliser collapses tspan whitespace into a
+    // single space-separated label.
+    const source = `<svg>
+      <title>Login Flow Diagram</title>
+      <text x="10" y="20">
+        <tspan x="10" dy="0">Authentication</tspan>
+        <tspan x="10" dy="15">Service</tspan>
+      </text>
+      <text x="50" y="80">
+        Plain
+        wrapped
+        label
+      </text>
+    </svg>`;
+    const result = ext.extract(null, source, "auth.svg");
+    const docstrings = result.symbols.map((s) => s.docstring);
+    expect(docstrings).toContain("Authentication Service");
+    expect(docstrings).toContain("Plain wrapped label");
+    // File docstring also tolerates the multi-line title regex.
+    expect(result.fileNode.docstring).toBe("Login Flow Diagram");
+  });
+
+  it("should extract <desc> bodies as section symbols", () => {
+    // <desc> is the SVG-native long-form description element. Most
+    // diagram tooling (e.g. Inkscape, hand-authored architecture
+    // diagrams) puts a short label in <title> and a multi-sentence
+    // explanation in <desc>; both are user-visible accessibility text
+    // and belong in the symbol list.
+    const source = `<svg>
+      <title>Network Topology</title>
+      <desc>Edge router connected to two backbone switches</desc>
+      <g>
+        <desc>Customer-facing zone</desc>
+      </g>
+    </svg>`;
+    const result = ext.extract(null, source, "net.svg");
+    const sources = result.symbols.map((s) => (s.decorators ?? [])[0]);
+    const docstrings = result.symbols.map((s) => s.docstring);
+    expect(sources).toContain("svg_desc");
+    expect(docstrings).toContain("Edge router connected to two backbone switches");
+    expect(docstrings).toContain("Customer-facing zone");
+  });
+
+  it("should extract aria-label attributes for path-only icons", () => {
+    // simple-icons-style SVGs ship a single <path> with all visible
+    // text replaced by aria-label. Without aria-label coverage every
+    // such icon is a symbol-less diagram in the graph.
+    const source = `<svg role="img" aria-label="GitHub">
+      <path d="M12 0C5.37..." aria-label="Logo glyph"/>
+    </svg>`;
+    const result = ext.extract(null, source, "icon.svg");
+    const docstrings = result.symbols.map((s) => s.docstring);
+    expect(docstrings).toContain("GitHub");
+    expect(docstrings).toContain("Logo glyph");
+    const sources = result.symbols.map((s) => (s.decorators ?? [])[0]);
+    expect(sources).toContain("svg_aria_label");
+  });
+
+  it("should decode XML entities in text bodies", () => {
+    const source = `<svg><text>R&amp;D Pipeline</text><title>A &lt; B</title></svg>`;
+    const result = ext.extract(null, source, "entities.svg");
+    const docstrings = result.symbols.map((s) => s.docstring);
+    expect(docstrings).toContain("R&D Pipeline");
+    expect(result.fileNode.docstring).toBe("A < B");
+  });
+
+  it("should classify each label by its source via decorator", () => {
+    const source = `<svg aria-label="Diagram Wrapper">
+      <title>Top Level</title>
+      <text>Body text</text>
+      <desc>Description text</desc>
+    </svg>`;
+    const result = ext.extract(null, source, "src/sources.svg");
+    const map = new Map(result.symbols.map((s) => [s.docstring, (s.decorators ?? [])[0]]));
+    expect(map.get("Top Level")).toBe("svg_title");
+    expect(map.get("Body text")).toBe("svg_text");
+    expect(map.get("Description text")).toBe("svg_desc");
+    expect(map.get("Diagram Wrapper")).toBe("svg_aria_label");
+  });
 });
