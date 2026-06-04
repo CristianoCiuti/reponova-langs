@@ -207,6 +207,162 @@ describe("TypescriptExtractor.extract (requires tree-sitter)", () => {
     expect(ns?.isWildcard).toBe(true);
   });
 
+  it("captures class fields including readonly / static / private modifiers", async () => {
+    // Class fields were previously dropped on the floor — only
+    // method_definition was handled. They are extremely common in
+    // real-world TS classes (DI tokens, configuration values, etc.)
+    // and now surface as `variable` symbols hung under their class.
+    const source = [
+      "export class HttpClient {",
+      "  private readonly baseUrl: string;",
+      "  static defaultTimeoutMs = 30_000;",
+      "  public retries: number = 3;",
+      "  constructor(baseUrl: string) {",
+      "    this.baseUrl = baseUrl;",
+      "  }",
+      "}",
+    ].join("\n");
+    const tree = await parse(source);
+    const ext = new TypescriptExtractor();
+    const result = ext.extract(tree, source, "src/http.ts");
+
+    const baseUrl = result.symbols.find((s) => s.name === "baseUrl");
+    expect(baseUrl?.kind).toBe("variable");
+    expect(baseUrl?.parent).toBe("HttpClient");
+    expect(baseUrl?.decorators).toContain("private");
+    expect(baseUrl?.decorators).toContain("readonly");
+
+    const timeout = result.symbols.find((s) => s.name === "defaultTimeoutMs");
+    expect(timeout?.parent).toBe("HttpClient");
+    expect(timeout?.decorators).toContain("static");
+
+    const retries = result.symbols.find((s) => s.name === "retries");
+    expect(retries?.decorators).toContain("public");
+  });
+
+  it("marks getters and setters with `getter` / `setter` decorators", async () => {
+    const source = [
+      "export class Counter {",
+      "  private _value = 0;",
+      "  get value(): number { return this._value; }",
+      "  set value(v: number) { this._value = v; }",
+      "  bump(): void { this._value += 1; }",
+      "}",
+    ].join("\n");
+    const tree = await parse(source);
+    const ext = new TypescriptExtractor();
+    const result = ext.extract(tree, source, "src/counter.ts");
+
+    const getter = result.symbols.find(
+      (s) => s.name === "value" && (s.decorators ?? []).includes("getter"),
+    );
+    const setter = result.symbols.find(
+      (s) => s.name === "value" && (s.decorators ?? []).includes("setter"),
+    );
+    expect(getter).toBeDefined();
+    expect(setter).toBeDefined();
+    const bump = result.symbols.find((s) => s.name === "bump");
+    expect(bump?.decorators ?? []).not.toContain("getter");
+    expect(bump?.decorators ?? []).not.toContain("setter");
+  });
+
+  it("marks async functions and methods with the `async` decorator", async () => {
+    const source = [
+      "export async function fetchData(url: string): Promise<string> {",
+      "  return '';",
+      "}",
+      "",
+      "export const fetchAlt = async (url: string) => '';",
+      "",
+      "export class Worker {",
+      "  async run(): Promise<void> {}",
+      "  stop(): void {}",
+      "  async *stream(): AsyncIterable<number> { yield 1; }",
+      "}",
+    ].join("\n");
+    const tree = await parse(source);
+    const ext = new TypescriptExtractor();
+    const result = ext.extract(tree, source, "src/async.ts");
+
+    const fetchFn = result.symbols.find((s) => s.name === "fetchData")!;
+    expect(fetchFn.decorators).toContain("async");
+    const fetchAlt = result.symbols.find((s) => s.name === "fetchAlt")!;
+    expect(fetchAlt.decorators).toContain("async");
+    const run = result.symbols.find((s) => s.name === "run")!;
+    expect(run.decorators).toContain("async");
+    const stop = result.symbols.find((s) => s.name === "stop")!;
+    expect(stop.decorators ?? []).not.toContain("async");
+    const stream = result.symbols.find((s) => s.name === "stream")!;
+    expect(stream.decorators).toContain("async");
+    expect(stream.decorators).toContain("generator");
+  });
+
+  it("promotes any exported `const` to a graph symbol, keeps lowercase locals hidden", async () => {
+    // `export const userService = createUserService()` is the canonical
+    // DI / module-singleton pattern and used to be silently dropped
+    // because the extractor only kept UPPER_SNAKE_CASE bindings.
+    const source = [
+      "export const userService = createUserService();",
+      "export const config = { retries: 3 };",
+      "export const MAX_RETRIES = 3;",
+      "const internalCache = new Map();",
+      "const helper = () => 'x';",
+    ].join("\n");
+    const tree = await parse(source);
+    const ext = new TypescriptExtractor();
+    const result = ext.extract(tree, source, "src/services.ts");
+
+    const names = result.symbols.map((s) => s.name);
+    expect(names).toContain("userService");
+    expect(names).toContain("config");
+    expect(names).toContain("MAX_RETRIES");
+    // Internal lowercase non-arrow bindings stay hidden.
+    expect(names).not.toContain("internalCache");
+    // Internal arrow functions are still captured (existing behaviour).
+    expect(names).toContain("helper");
+
+    expect(result.exports).toContain("userService");
+    expect(result.exports).toContain("config");
+    expect(result.exports).toContain("MAX_RETRIES");
+  });
+
+  it("dedupes function and method overload signatures, keeping the implementation", async () => {
+    // Overloads are a normal TS pattern: signatures-without-body for the
+    // declarations, followed by one signature-with-body for the actual
+    // implementation. Graph consumers should see exactly one symbol per
+    // function name; we keep the implementation (last occurrence).
+    const source = [
+      "export function format(x: number): string;",
+      "export function format(x: string): string;",
+      "export function format(x: number | string): string {",
+      "  return String(x);",
+      "}",
+      "",
+      "export class Repo {",
+      "  find(id: number): string;",
+      "  find(id: string): string;",
+      "  find(id: number | string): string {",
+      "    return String(id);",
+      "  }",
+      "}",
+    ].join("\n");
+    const tree = await parse(source);
+    const ext = new TypescriptExtractor();
+    const result = ext.extract(tree, source, "src/overloads.ts");
+
+    const formatSyms = result.symbols.filter((s) => s.name === "format");
+    expect(formatSyms.length).toBe(1);
+    // The retained symbol must be the implementation: its signature
+    // mentions the union return type (only the impl uses it).
+    expect(formatSyms[0]?.signature).toContain("number | string");
+
+    const findSyms = result.symbols.filter(
+      (s) => s.name === "find" && s.parent === "Repo",
+    );
+    expect(findSyms.length).toBe(1);
+    expect(findSyms[0]?.signature).toContain("number | string");
+  });
+
   it("captures call references inside function bodies", async () => {
     const source = [
       "function load() {",
