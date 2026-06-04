@@ -12,9 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Full matrix runs only on push to main (deterministic baseline).
   ci-matrix:
-    if: github.event_name == 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -34,21 +32,19 @@ jobs:
       - run: pnpm build
       - run: pnpm test
 
-  # PR runs only the affected slice on a single OS/Node combo (cheap default).
-  # Tweak to match the full matrix if a PR needs broader proof.
-  affected:
-    if: github.event_name == 'pull_request'
+  # Aggregator: this is the single check that branch protection requires.
+  # It marks success only if every matrix job succeeded. Adding or removing
+  # entries from the matrix never requires touching the protection rule.
+  gate:
+    needs: [ci-matrix]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter "...[origin/${{ github.base_ref }}]" typecheck
-      - run: pnpm --filter "...[origin/${{ github.base_ref }}]" build
-      - run: pnpm --filter "...[origin/${{ github.base_ref }}]" test
+      - name: Verify all matrix jobs succeeded
+        run: |
+          result="${{ needs.ci-matrix.result }}"
+          if [ "$result" != "success" ]; then
+            echo "::error::ci-matrix did not succeed (result: $result)"
+            exit 1
+          fi
+          echo "All matrix jobs passed."
