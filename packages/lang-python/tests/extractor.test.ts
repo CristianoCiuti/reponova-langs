@@ -189,4 +189,57 @@ class Greeter:
     const callRef = result.references.find(r => r.kind === "calls" && r.name === "print");
     expect(callRef).toBeDefined();
   });
+
+  it("should unwrap subscripted / dotted bases and ignore keyword arguments", async () => {
+    const wts = await import("web-tree-sitter");
+    const Parser = (wts as any).default ?? (wts as any).Parser;
+    await Parser.init();
+    const Language = (wts as any).Language ?? Parser.Language;
+    const lang = await Language.load(plugin.grammarPath!);
+    const parser = new Parser();
+    parser.setLanguage(lang);
+
+    const source = [
+      "from typing import Generic, TypeVar",
+      "",
+      "K = TypeVar('K')",
+      "V = TypeVar('V')",
+      "",
+      "class Box(Generic[K, V]):",
+      "    pass",
+      "",
+      "class StrBox(Box[str, str]):",
+      "    pass",
+      "",
+      "class TypedBox(typing.Generic[K]):",
+      "    pass",
+      "",
+      "class WithMeta(Box[K, V], metaclass=type):",
+      "    pass",
+      "",
+    ].join("\n");
+    const tree = parser.parse(source);
+    const ext = new PythonExtractor();
+    const result = ext.extract(tree, source, "boxes.py");
+
+    const box = result.symbols.find((s) => s.name === "Box");
+    expect(box?.bases).toEqual(["Generic"]);
+
+    const strBox = result.symbols.find((s) => s.name === "StrBox");
+    expect(strBox?.bases).toEqual(["Box"]);
+
+    const typedBox = result.symbols.find((s) => s.name === "TypedBox");
+    expect(typedBox?.bases).toEqual(["typing.Generic"]);
+
+    // `metaclass=type` is a keyword_argument and must NOT leak into `bases`.
+    const withMeta = result.symbols.find((s) => s.name === "WithMeta");
+    expect(withMeta?.bases).toEqual(["Box"]);
+
+    // Each base also produces an extends-reference now.
+    const refsTo = (name: string) =>
+      result.references.filter((r) => r.kind === "extends" && r.name === name).length;
+    expect(refsTo("Generic")).toBeGreaterThanOrEqual(1);
+    expect(refsTo("Box")).toBeGreaterThanOrEqual(2);
+    expect(refsTo("typing.Generic")).toBeGreaterThanOrEqual(1);
+  });
 });
