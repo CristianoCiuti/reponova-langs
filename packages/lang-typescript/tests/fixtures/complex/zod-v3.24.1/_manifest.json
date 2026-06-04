@@ -1,0 +1,73 @@
+{
+  "upstream": "https://github.com/colinhacks/zod",
+  "ref": "v3.24.1",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2020 Colin McDonnell",
+  "files": [
+    {
+      "path": "src/ZodError.ts",
+      "sha256": "fdc5a8114a138f8eda17d58a83dc9f46c2db885397c953da3c86069e90326612",
+      "size": 8909
+    },
+    {
+      "path": "src/errors.ts",
+      "sha256": "c744e98e5586c29dbebddd9bab6b46886e67e313321793edabc3106ec7c7c438",
+      "size": 299
+    },
+    {
+      "path": "src/external.ts",
+      "sha256": "f5ef066942e4f0bd98200aa6a6694b831e73200c9b3ade77ad0aa2409e8fe1b1",
+      "size": 187
+    },
+    {
+      "path": "src/helpers/enumUtil.ts",
+      "sha256": "54efc393cc9860e687d8b81ff52e980def00fa67377ad0bf8b3104f8a5bf698c",
+      "size": 612
+    },
+    {
+      "path": "src/helpers/errorUtil.ts",
+      "sha256": "7a77328240be7b847af6de9189963bd9f79cab32bbc61502a9db4fe6683e2ea7",
+      "size": 338
+    },
+    {
+      "path": "src/helpers/parseUtil.ts",
+      "sha256": "2d8d845fbeb48634ea926223d530fdcef141ea5c9e97cbd3abe030e0832e2c24",
+      "size": 5323
+    },
+    {
+      "path": "src/helpers/partialUtil.ts",
+      "sha256": "45ea3afb272487961758dac5c37d53df741804d389dfc62e048ebccd4eea15ed",
+      "size": 2579
+    },
+    {
+      "path": "src/helpers/typeAliases.ts",
+      "sha256": "0fda31a063c6736fc3cf9090dd94865c811dfff4f3cb8707b932bf937c6f2c3e",
+      "size": 151
+    },
+    {
+      "path": "src/helpers/util.ts",
+      "sha256": "30c273131661ca5dc973f2cfb196fa23caf3a43e224cdde7a683b72e101a31fc",
+      "size": 5625
+    },
+    {
+      "path": "src/index.ts",
+      "sha256": "b9e99cd94f4166a245f5158f7286c05406e2a4c694619bceb7a4f3519d1d768e",
+      "size": 93
+    },
+    {
+      "path": "src/locales/en.ts",
+      "sha256": "5e32b6ce594b5b09ab73612e4a008143b7f5dfda5850b4922292ff76e78bfa29",
+      "size": 5228
+    },
+    {
+      "path": "src/standard-schema.ts",
+      "sha256": "4abb2e7bd784fb95d219584673971bb317e74fb4fd0c74c196b558ba46df4456",
+      "size": 2706
+    },
+    {
+      "path": "src/types.ts",
+      "sha256": "aa45bac361c1c287ca379aa0391fad2a6af9f0355b79ec13f3f50cc9faac321b",
+      "size": 160050
+    }
+  ]
+}

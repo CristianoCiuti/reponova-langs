@@ -36,9 +36,17 @@ plugins:
     enabled: true
 ```
 
+## Test fixtures
+
+The package ships three tiers of test fixtures, in line with section 8.7 of the workspace integration plan:
+
+- **`tests/fixtures/simple/`** — focused single-file scenarios (e.g. a structured logger). Used to lock down the basic extraction shape.
+- **`tests/fixtures/medium/`** — a multi-feature file exercising decorators, generics, re-exports, and class hierarchies.
+- **`tests/fixtures/complex/zod-v3.24.1/`** — a 13-file, ~6.6 k LOC verbatim snapshot of the [`colinhacks/zod`](https://github.com/colinhacks/zod) `src/` tree (excluding tests and benchmarks), pinned at `v3.24.1`, MIT-licensed. Provenance and per-file SHA-256 hashes are recorded in [`ATTRIBUTION.md`](./tests/fixtures/complex/zod-v3.24.1/ATTRIBUTION.md). The complex tier guards against regressions on real-world TypeScript with heavy generics, conditional types, and class hierarchies.
+
 ## Limitations
 
-- **`.tsx` is not supported in v0.1.0.** TypeScript with JSX needs a separate grammar (`tree-sitter-tsx.wasm`), and the current `LanguagePlugin` contract supports only one grammar per plugin. Adding `.tsx` requires extending the contract in the `reponova` core. Tracked for v0.2.0.
+- **`.tsx` will land as a separate `@reponova/lang-tsx` package.** TypeScript with JSX needs a separate grammar (`tree-sitter-tsx.wasm`); rather than extending the core `LanguagePlugin` contract to accept multiple grammars per plugin, we plan to ship `.tsx` as a sibling plugin that re-uses `TypescriptExtractor` from this package. Tracked for the next Wave-1 PR.
 - **`tsconfig.json` `paths`** are not resolved. Bare specifiers (`@app/*`) resolve to `[]` (treated as external). Resolution still works for relative (`./`, `../`) and absolute paths.
 - **Default exports** appear in `exports` as the literal string `"default"`. The original symbol name (if any) is also included.
 - **Call references** are recorded by name only (`foo`, `obj.method`); we do not attempt to resolve overloads or generic instantiation.
