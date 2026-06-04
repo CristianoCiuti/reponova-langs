@@ -1,12 +1,16 @@
 {
   "name": "@reponova/lang-svg",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "SVG diagram support for RepoNova",
   "type": "module",
   "exports": {
     ".": "./dist/index.js"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=18"
   },
@@ -26,7 +30,9 @@
   "reponova": {
     "type": "language",
     "id": "svg",
-    "extensions": [".svg"]
+    "extensions": [
+      ".svg"
+    ]
   },
   "license": "MIT",
   "repository": {

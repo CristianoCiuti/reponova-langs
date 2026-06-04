@@ -1,12 +1,17 @@
 {
   "name": "@reponova/lang-python",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Python language support for RepoNova",
   "type": "module",
   "exports": {
     ".": "./dist/index.js"
   },
-  "files": ["dist", "grammars", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "grammars",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=18"
   },
@@ -27,7 +32,10 @@
   "reponova": {
     "type": "language",
     "id": "python",
-    "extensions": [".py", ".pyw"],
+    "extensions": [
+      ".py",
+      ".pyw"
+    ],
     "grammar": "./grammars/tree-sitter-python.wasm"
   },
   "license": "MIT",
