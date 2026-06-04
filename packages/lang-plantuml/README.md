@@ -10,9 +10,14 @@ reponova lang add @reponova/lang-plantuml
 
 ## What it provides
 
-- **PlantUML** (`.puml`, `.plantuml`): Extracts classes, interfaces, relationships from PlantUML diagrams
+- **PlantUML** (`.puml`, `.plantuml`): regex-based line-by-line parser (no tree-sitter grammar required) covering:
+  - **Class diagrams**: `class`, `abstract class` / `abstract`, `interface`, `enum`, plus relationship arrows.
+  - **Sequence diagrams**: `actor`, `participant`, `boundary`, `control`, `entity`, `collections`.
+  - **State diagrams**: `state X`, `state "Display" as Alias`. The `[*]` pseudostate is intentionally not a symbol.
+  - **Component / deployment diagrams**: `component`, `cloud`, `node`, `database`, `queue`, `rectangle`, `frame`, `folder`, `package`, plus the `[Foo]` bracket shorthand for inline components.
+  - **C4-DSL macros**: `Person`, `Person_Ext`, `System`, `System_Ext`, `SystemDb`, `Container`, `ContainerDb`, `ContainerQueue`, `Component`, `Component_Ext`, plus the `*_Boundary` macros.
 
-No tree-sitter grammar required — parsing is regex-based.
+Aliases win over display labels: `participant "Web UI" as UI` produces a symbol named `UI` (so it joins arrows like `UI -> API`) with the display label `Web UI` retained as the symbol's docstring. When a node is declared without an alias, the unquoted display label is sanitised into a graph-friendly identifier (`"Public Internet"` → `Public_Internet`).
 
 ## Extensions
 
@@ -46,18 +51,8 @@ The package ships three tiers of test fixtures, in line with section 8.7 of the 
 - **`tests/fixtures/medium/order-flow.puml`** — a multi-actor sequence diagram with `alt` branches, activations and notes.
 - **`tests/fixtures/complex/`** — five hand-authored real-world diagrams (class, sequence, component, state, C4 context). Hand-authored rather than vendored from upstream because most public PlantUML libraries (e.g. plantuml-stdlib) ship under GPL/CC-BY-SA terms that are not compatible with re-distribution as MIT-licensed test fixtures.
 
-### Known extractor scope (today)
+### Known limits today
 
-The current extractor recognises class-diagram constructs (`class`,
-`interface`, `enum`, `abstract`/`abstract class`) plus the `title`
-directive. It does **not** yet recognise:
-
-- sequence-diagram `actor` / `participant ... as ...`
-- state-diagram `state ...` / `[*]` transitions
-- component-diagram `component`/`cloud`/`node`/`database`/`queue`/`rectangle` keywords
-- C4-style `Person` / `System` / `Container` macros
-
-The complex/ fixtures intentionally cover those diagram families so that,
-when the extractor is later extended, the regression surface is already
-in place. The current behaviour is pinned by explicit tests under
-`tests/fixtures.test.ts > complex/ tier`.
+- Implicit states introduced only by transitions (e.g. `Empty` in `[*] --> Empty`) are **not** promoted to symbols. Only explicit `state X` / `state "Display" as Alias` declarations count. Add the explicit declaration if you need the node in your graph.
+- Relationship arrows are recognised only for class-style diagrams (`Foo --> Bar`), where both endpoints are bare identifiers. Sequence-message arrows (`Foo -> Bar : msg`) are matched by the same regex so they also produce `extends` references when both ends are simple identifiers.
+- Bracket shorthand (`[Browser]`) records the node but not its containing `cloud { … }` or `node { … }` parent — the hierarchy is flat.
