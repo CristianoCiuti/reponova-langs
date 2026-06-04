@@ -39,6 +39,17 @@ Tree-sitter `.wasm` grammars are **not committed to git**. They are pinned (vers
 
 See [`tools/grammar-fetcher/README.md`](./tools/grammar-fetcher/README.md) for adding or bumping a grammar.
 
+### npm Trusted Publisher (OIDC)
+
+Each `@reponova/lang-*` package on npmjs.com is configured with a GitHub Actions OIDC Trusted Publisher pointing at `release.yml` in this repo. There are no long-lived `NPM_TOKEN` secrets in CI.
+
+Adding a new plugin to npm requires a one-time setup (first manual publish + `pnpm trust:configure --apply`). See [`tools/trust-configure/README.md`](./tools/trust-configure/README.md) for the end-to-end procedure.
+
+```bash
+pnpm trust:configure          # dry-run: list packages, show npm trust commands
+pnpm trust:configure --apply  # actually configure (requires npm login + npm >= 11.10.0)
+```
+
 ### Scaffold a new plugin
 
 ```bash
