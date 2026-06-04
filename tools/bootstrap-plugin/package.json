@@ -1,0 +1,20 @@
+{
+  "name": "@reponova/bootstrap-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "description": "One-shot helper that publishes a brand-new @reponova/lang-* package and configures its npm OIDC Trusted Publisher.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "echo 'bootstrap-plugin is invoked via tsx - no build needed'"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  },
+  "license": "MIT"
+}
