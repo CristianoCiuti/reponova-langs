@@ -41,13 +41,7 @@ describe("@reponova/lang-python plugin", () => {
 
 describe("PythonExtractor.extract (requires tree-sitter)", () => {
   // These tests need the real tree-sitter parser + wasm grammar
-  let parse: typeof import("reponova")["parse"] | undefined;
-
-  // Try to import the parser; skip tests if web-tree-sitter not available
   it("should parse and extract a simple function", async () => {
-    const { parse: parseFn } = await import("reponova/dist/index.js") as any;
-
-    // If parse isn't exported, use direct approach
     const wts = await import("web-tree-sitter");
     const Parser = (wts as any).default ?? (wts as any).Parser;
     await Parser.init();

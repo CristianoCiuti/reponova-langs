@@ -13,7 +13,7 @@ import type {
   SymbolReference,
 } from 'reponova';
 
-export interface ExpectedFileNode extends Partial<FileNodeDeclaration> {}
+export type ExpectedFileNode = Partial<FileNodeDeclaration>;
 
 export interface ExpectedSymbol {
   name: string;

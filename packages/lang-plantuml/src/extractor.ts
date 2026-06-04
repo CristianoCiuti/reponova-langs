@@ -43,7 +43,7 @@ export class PlantUmlExtractor implements LanguageExtractor {
     };
 
     const classRegex = /^\s*(class|interface|enum|abstract class|abstract)\s+["']?(\w+)["']?/;
-    const relationRegex = /^\s*(\w+)\s*([<\-\.\|>*o]+)\s*(\w+)/;
+    const relationRegex = /^\s*(\w+)\s*([<\-.|>*o]+)\s*(\w+)/;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]!;
