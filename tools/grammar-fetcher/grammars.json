@@ -1,0 +1,19 @@
+{
+  "$comment": "Pinned tree-sitter grammar manifest. Source of truth for which .wasm versions ship in each @reponova/lang-* package. The fetcher downloads each asset from its upstream GitHub release and verifies the SHA-256 before writing to packages/<package>/grammars/<filename>.",
+  "grammars": [
+    {
+      "id": "tree-sitter-python",
+      "package": "lang-python",
+      "filename": "tree-sitter-python.wasm",
+      "source": {
+        "type": "github-release",
+        "owner": "tree-sitter",
+        "repo": "tree-sitter-python",
+        "tag": "v0.25.0",
+        "asset": "tree-sitter-python.wasm"
+      },
+      "sha256": "16108b50df4ee9a30168794252ab55e7c93bfc5765d7fa0aa3e335752c515f47",
+      "size": 457883
+    }
+  ]
+}

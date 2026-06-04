@@ -1,0 +1,20 @@
+{
+  "name": "@reponova/grammar-fetcher",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Fetch and verify tree-sitter .wasm grammars from upstream releases.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "echo 'grammar-fetcher is invoked via tsx - no build needed'"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  },
+  "license": "MIT"
+}

@@ -16,7 +16,9 @@
     "node": ">=18"
   },
   "scripts": {
+    "prebuild": "pnpm -w grammar-fetch --package=lang-python",
     "build": "tsup",
+    "pretest": "pnpm -w grammar-fetch --package=lang-python",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm run build"

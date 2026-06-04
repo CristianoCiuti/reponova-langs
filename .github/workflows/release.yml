@@ -45,6 +45,9 @@ jobs:
         run: npm install -g npm@latest
 
       - run: pnpm install --frozen-lockfile
+      # Populate packages/*/grammars/*.wasm from upstream releases (verified by SHA-256)
+      # so each published tarball ships the pinned grammar declared in the manifest.
+      - run: pnpm grammar-fetch
       - run: pnpm build
 
       - name: Create release PR or publish
