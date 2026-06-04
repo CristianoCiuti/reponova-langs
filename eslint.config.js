@@ -19,6 +19,12 @@ export default tseslint.config(
       '**/coverage/**',
       '**/grammars/**',
       'pnpm-lock.yaml',
+      // Verbatim third-party snapshots used as `complex/` test fixtures.
+      // By convention, anything under `tests/fixtures/complex/` is a pinned
+      // upstream snapshot (see each fixture's ATTRIBUTION.md) and must NOT
+      // be modified by lint autofixers. Hand-authored `simple/` and `medium/`
+      // fixtures remain lint-checked.
+      '**/tests/fixtures/complex/**',
     ],
   },
   js.configs.recommended,

@@ -1,0 +1,12 @@
+# Force LF line endings for every file in this snapshot, on every platform.
+#
+# These files are a verbatim third-party snapshot; their SHA-256 hashes
+# are recorded in `_manifest.json` and `ATTRIBUTION.md`. Any CRLF
+# conversion (e.g. via core.autocrlf=true on Windows) would invalidate
+# those hashes on checkout. Treating them as `text eol=lf` keeps the
+# working tree, the repository, and the manifest in sync on all OSes.
+*           text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.ts        text eol=lf
+LICENSE     text eol=lf
