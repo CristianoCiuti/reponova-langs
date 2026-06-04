@@ -12,6 +12,19 @@
 
 import { existsSync } from 'node:fs';
 
+interface ParserInstance {
+  setLanguage: (lang: unknown) => void;
+  parse: (src: string) => unknown;
+}
+
+interface ParserCtor {
+  new (): ParserInstance;
+}
+
+interface LanguageStatic {
+  load: (path: string) => Promise<unknown>;
+}
+
 export interface LoadedGrammar {
   /** Tree-sitter Parser instance, already configured with the grammar. */
   parser: unknown;
@@ -31,17 +44,23 @@ export async function loadGrammar(
     return null;
   }
   const treeSitter = (await import('web-tree-sitter')) as unknown as {
-    Parser: new () => { setLanguage: (lang: unknown) => void; parse: (src: string) => unknown };
-    Language: { load: (path: string) => Promise<unknown> };
-    default?: { init: () => Promise<void> };
-    init?: () => Promise<void>;
+    Parser: ParserCtor & { init?: () => Promise<void>; Language?: LanguageStatic };
+    Language?: LanguageStatic;
+    default?: ParserCtor & { init?: () => Promise<void>; Language?: LanguageStatic };
   };
-  const initFn = treeSitter.init ?? treeSitter.default?.init;
-  if (typeof initFn === 'function') {
-    await initFn();
+  // web-tree-sitter 0.25.x exposes init() on the Parser class. Older
+  // versions exposed it on the module's default export. Try both.
+  const ParserClass = treeSitter.Parser ?? treeSitter.default;
+  if (!ParserClass) throw new Error('web-tree-sitter: Parser export not found');
+  if (typeof ParserClass.init === 'function') {
+    await ParserClass.init();
   }
-  const language = await treeSitter.Language.load(wasmPath);
-  const parser = new treeSitter.Parser();
+  const LanguageClass = treeSitter.Language ?? ParserClass.Language;
+  if (!LanguageClass || typeof LanguageClass.load !== 'function') {
+    throw new Error('web-tree-sitter: Language.load() not found');
+  }
+  const language = await LanguageClass.load(wasmPath);
+  const parser = new ParserClass();
   parser.setLanguage(language);
   return {
     parser,
