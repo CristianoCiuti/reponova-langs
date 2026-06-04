@@ -90,16 +90,54 @@ export class TypescriptExtractor implements LanguageExtractor {
 
     this.handleSiblings(tree.rootNode, sourceCode, symbols, imports, references, moduleName);
 
-    const exports = this.computeExports(tree, sourceCode, symbols);
+    // Dedupe overloads: tree-sitter-typescript represents function /
+    // method overloads as one or more `function_signature` /
+    // `method_signature` nodes (no body) followed by the actual
+    // `function_declaration` / `method_definition` (with body). We
+    // extract all of them so .d.ts files still produce symbols, then
+    // collapse same-`qualifiedName` entries to the LAST one, which is
+    // either the implementation or the only signature in an ambient
+    // declaration file.
+    const dedupedSymbols = this.dedupeByQualifiedName(symbols);
+
+    const exports = this.computeExports(tree, sourceCode, dedupedSymbols);
     return {
       filePath,
       language: this.languageId,
       fileNode,
-      symbols,
+      symbols: dedupedSymbols,
       imports,
       references,
       exports,
     };
+  }
+
+  /**
+   * Collapse same-name overload entries to the LAST occurrence (which is
+   * the implementation in normal TS source files, or the only signature
+   * in `.d.ts`). Getters and setters share their `qualifiedName` but are
+   * conceptually distinct members, so we add `#getter` / `#setter` to
+   * the dedup key — never to the public qualifiedName itself — so a
+   * `class Foo { get name() {…}; set name(v) {…} }` produces two
+   * symbols with a clean `mod.Foo.name` qualifiedName each.
+   */
+  private dedupeByQualifiedName(symbols: SymbolNode[]): SymbolNode[] {
+    const result: SymbolNode[] = [];
+    const indexByKey = new Map<string, number>();
+    for (const sym of symbols) {
+      const decorators = sym.decorators ?? [];
+      let key = sym.qualifiedName;
+      if (decorators.includes("getter")) key += "#getter";
+      else if (decorators.includes("setter")) key += "#setter";
+      const existing = indexByKey.get(key);
+      if (existing !== undefined) {
+        result[existing] = sym;
+      } else {
+        indexByKey.set(key, result.length);
+        result.push(sym);
+      }
+    }
+    return result;
   }
 
   resolveImportPath(importModule: string, currentFilePath: string): string[] {
@@ -199,6 +237,11 @@ export class TypescriptExtractor implements LanguageExtractor {
         return;
 
       case "function_declaration":
+      case "function_signature":
+        // function_signature covers `.d.ts` ambient declarations and
+        // function overload signatures. We extract them so the graph
+        // sees the symbol; same-name duplicates are deduped at the
+        // tail of `extract()`.
         this.extractFunction(node, symbols, references, moduleName, undefined, decorators, jsDoc, isExported);
         return;
 
@@ -226,7 +269,7 @@ export class TypescriptExtractor implements LanguageExtractor {
 
       case "lexical_declaration":
       case "variable_declaration":
-        this.extractTopLevelDeclarations(node, symbols, references, moduleName, jsDoc);
+        this.extractTopLevelDeclarations(node, symbols, references, moduleName, jsDoc, isExported);
         return;
     }
   }
@@ -376,12 +419,14 @@ export class TypescriptExtractor implements LanguageExtractor {
       ? `${moduleName}.${parentClass}.${name}`
       : `${moduleName}.${name}`;
 
+    const finalDecorators = this.augmentDecoratorsWithModifiers(node, decorators);
+
     symbols.push({
       name,
       qualifiedName,
       kind,
       signature,
-      decorators,
+      decorators: finalDecorators,
       docstring,
       startLine: node.startPosition.row + 1,
       endLine: node.endPosition.row + 1,
@@ -396,6 +441,39 @@ export class TypescriptExtractor implements LanguageExtractor {
         line: node.startPosition.row + 1,
       });
     }
+  }
+
+  /**
+   * Prepend implicit modifier markers to the decorator list so consumers
+   * can distinguish:
+   *   - `async function fetch(...)` → `async`
+   *   - `class Foo { get name() { … } }` → `getter`
+   *   - `class Foo { set name(v) { … } }` → `setter`
+   *   - `function* gen()` / `async function* gen()` → `generator`
+   *
+   * tree-sitter-typescript exposes these as anonymous keyword tokens in
+   * `node.children` (NOT `namedChildren`), so we sweep through the raw
+   * children list looking for the relevant token types.
+   */
+  private augmentDecoratorsWithModifiers(node: SyntaxNode, decorators: string[]): string[] {
+    const modifiers: string[] = [];
+    for (const child of node.children) {
+      switch (child.type) {
+        case "async":
+          if (!modifiers.includes("async")) modifiers.push("async");
+          break;
+        case "get":
+          if (!modifiers.includes("getter")) modifiers.push("getter");
+          break;
+        case "set":
+          if (!modifiers.includes("setter")) modifiers.push("setter");
+          break;
+        case "*":
+          if (!modifiers.includes("generator")) modifiers.push("generator");
+          break;
+      }
+    }
+    return modifiers.length > 0 ? [...modifiers, ...decorators] : decorators;
   }
 
   // ─── Classes ────────────────────────────────────────────────────────────
@@ -469,7 +547,11 @@ export class TypescriptExtractor implements LanguageExtractor {
         pendingDecorators.push(member.text.trim().replace(/^@/, ""));
         continue;
       }
-      if (member.type === "method_definition") {
+      if (member.type === "method_definition" || member.type === "method_signature") {
+        // method_signature covers method overloads (`bar(x: number): void;`)
+        // and members of `interface`-shaped class hierarchies. They're
+        // emitted alongside the implementation; the dedup pass at the
+        // end of `extract()` collapses duplicates by qualifiedName.
         this.extractFunction(
           member,
           symbols,
@@ -483,11 +565,74 @@ export class TypescriptExtractor implements LanguageExtractor {
         pendingJsDoc = undefined;
         continue;
       }
-      // public_field_definition, abstract_method_signature, accessibility_modifier, etc.
-      // Reset pending so they don't leak to the next method.
+      if (member.type === "public_field_definition") {
+        this.extractClassField(member, symbols, moduleName, className, pendingDecorators, pendingJsDoc);
+        pendingDecorators = [];
+        pendingJsDoc = undefined;
+        continue;
+      }
+      if (member.type === "abstract_method_signature") {
+        // `abstract bar(): void;` carries no implementation. Treat it
+        // exactly like a method so subclasses can resolve `extends`
+        // against the abstract member name.
+        this.extractFunction(
+          member,
+          symbols,
+          references,
+          moduleName,
+          className,
+          [...pendingDecorators, "abstract"],
+          pendingJsDoc,
+        );
+        pendingDecorators = [];
+        pendingJsDoc = undefined;
+        continue;
+      }
+      // accessibility_modifier and other syntactic noise. Reset pending so
+      // the buffered jsdoc/decorators don't leak to the next member.
       pendingDecorators = [];
       pendingJsDoc = undefined;
     }
+  }
+
+  /**
+   * Class fields like `name: string`, `count = 0`, `readonly tag = "foo"`.
+   * We surface them as `variable` symbols hung under their class so graph
+   * consumers can navigate to the field declaration site. The original
+   * accessibility (public / private / protected) and `readonly` keywords
+   * are preserved as decorator markers, alongside any TC39 `@`-decorators
+   * already buffered by the caller.
+   */
+  private extractClassField(
+    node: SyntaxNode,
+    symbols: SymbolNode[],
+    moduleName: string,
+    className: string,
+    decorators: string[],
+    docstring: string | undefined,
+  ): void {
+    const nameNode = node.childForFieldName("name");
+    if (!nameNode) return;
+    const name = nameNode.text;
+    if (!name) return;
+
+    const modifiers: string[] = [];
+    for (const child of node.children) {
+      if (child.type === "accessibility_modifier") modifiers.push(child.text);
+      else if (child.type === "readonly") modifiers.push("readonly");
+      else if (child.type === "static") modifiers.push("static");
+    }
+
+    symbols.push({
+      name,
+      qualifiedName: `${moduleName}.${className}.${name}`,
+      kind: "variable",
+      decorators: [...modifiers, ...decorators],
+      docstring,
+      startLine: node.startPosition.row + 1,
+      endLine: node.endPosition.row + 1,
+      parent: className,
+    });
   }
 
   /**
@@ -631,12 +776,26 @@ export class TypescriptExtractor implements LanguageExtractor {
 
   // ─── Top-level const / let / var ────────────────────────────────────────
 
+  /**
+   * Top-level `const` / `let` / `var` declarations.
+   *
+   * Three classes of declaration produce graph symbols:
+   *   1. Arrow / function expressions (`const handler = () => …`,
+   *      `const httpClient = function () { … }`) become `kind: "function"`.
+   *   2. UPPER_SNAKE_CASE bindings become `kind: "constant"` regardless
+   *      of whether they're exported (matches Python's behaviour).
+   *   3. Any *exported* binding becomes `kind: "constant"` so consumers
+   *      see `export const userService = createUserService()` in the
+   *      symbol list. Internal lowercase bindings remain hidden so
+   *      garden-variety locals (`const tmp = …`) don't pollute the graph.
+   */
   private extractTopLevelDeclarations(
     node: SyntaxNode,
     symbols: SymbolNode[],
     references: SymbolReference[],
     moduleName: string,
     docstring: string | undefined,
+    isExported = false,
   ): void {
     for (const declarator of node.namedChildren) {
       if (declarator.type !== "variable_declarator") continue;
@@ -650,12 +809,13 @@ export class TypescriptExtractor implements LanguageExtractor {
         const signature = this.buildArrowFunctionSignature(value, name);
         const calls = this.extractCalls(value);
         const qualifiedName = `${moduleName}.${name}`;
+        const decorators = this.augmentDecoratorsWithModifiers(value, []);
         symbols.push({
           name,
           qualifiedName,
           kind: "function",
           signature,
-          decorators: [],
+          decorators,
           docstring,
           startLine: node.startPosition.row + 1,
           endLine: node.endPosition.row + 1,
@@ -671,8 +831,8 @@ export class TypescriptExtractor implements LanguageExtractor {
         continue;
       }
 
-      // Heuristic: UPPER_SNAKE_CASE → constant; everything else is not promoted to a graph symbol
-      if (/^[A-Z][A-Z0-9_]*$/.test(name)) {
+      const isUpperSnake = /^[A-Z][A-Z0-9_]*$/.test(name);
+      if (isUpperSnake || isExported) {
         symbols.push({
           name,
           qualifiedName: `${moduleName}.${name}`,
