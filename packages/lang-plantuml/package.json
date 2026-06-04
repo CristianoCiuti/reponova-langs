@@ -1,12 +1,16 @@
 {
   "name": "@reponova/lang-plantuml",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "PlantUML support for RepoNova",
   "type": "module",
   "exports": {
     ".": "./dist/index.js"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=18"
   },
@@ -26,7 +30,10 @@
   "reponova": {
     "type": "language",
     "id": "plantuml",
-    "extensions": [".puml", ".plantuml"]
+    "extensions": [
+      ".puml",
+      ".plantuml"
+    ]
   },
   "license": "MIT",
   "repository": {
