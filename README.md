@@ -48,7 +48,7 @@ pnpm version-packages    # apply version bumps locally
 
 ## Architecture
 
-Plugins are independent npm packages conforming to the `LanguagePlugin` interface defined in the [`reponova` core](https://github.com/CristianoCiuti/reponova). See [`INTEGRATION-PLAN.md`](https://github.com/CristianoCiuti/reponova/blob/main/INTEGRATION-PLAN.md) for the full integration plan and language roadmap.
+Plugins are independent npm packages conforming to the `LanguagePlugin` interface defined in [reponova](https://github.com/CristianoCiuti/reponova).
 
 ## License
 

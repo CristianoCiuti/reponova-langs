@@ -1,0 +1,28 @@
+# @reponova/scaffold
+
+CLI generator for new `@reponova/lang-*` plugin packages.
+
+## Usage
+
+From the monorepo root:
+
+```bash
+pnpm scaffold lang-<id> [--ext=.<ext1>,.<ext2>] [--archetype=A|B|C] [--desc="..."]
+```
+
+Examples:
+
+```bash
+pnpm scaffold lang-rust --ext=.rs --archetype=A --desc="Rust language support"
+pnpm scaffold lang-mermaid --ext=.mmd,.mermaid --archetype=B
+```
+
+Archetypes (from INTEGRATION-PLAN.md section 9.3):
+
+- `A` - programming language (`fileNode.kind = "module"`, typical tree-sitter + outline)
+- `B` - diagram (`fileNode.kind = "diagram"`, typical regex)
+- `C` - visual asset (`fileNode.kind = "diagram"`, regex over text content)
+
+The generated package is created in `packages/lang-<id>/` and is ready to be
+filled in: extractor stub, fixtures placeholders, test scaffolds, README, all
+in place.

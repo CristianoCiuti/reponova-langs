@@ -6,21 +6,22 @@
   "exports": {
     ".": "./dist/index.js"
   },
-  "files": ["dist"],
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts",
+    "build": "tsup",
     "test": "vitest run",
-    "prepublishOnly": "npm run build"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
-    "reponova": "^0.x"
+    "reponova": "^0.4.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "reponova": "file:../reponova",
-    "tsup": "^8.0.0",
-    "typescript": "^5.5.0",
-    "vitest": "^2.0.0"
+    "@reponova/lang-test-utils": "workspace:*",
+    "reponova": "^0.4.3"
   },
   "reponova": {
     "type": "language",
@@ -30,7 +31,8 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/CristianoCiuti/reponova-lang-plantuml.git"
+    "url": "git+https://github.com/CristianoCiuti/reponova-langs.git",
+    "directory": "packages/lang-plantuml"
   },
-  "homepage": "https://github.com/CristianoCiuti/reponova-lang-plantuml"
+  "homepage": "https://github.com/CristianoCiuti/reponova-langs/tree/main/packages/lang-plantuml"
 }
