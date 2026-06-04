@@ -78,6 +78,18 @@ importers:
         specifier: ^0.4.3
         version: 0.4.3(apache-arrow@18.1.0)(typescript@5.9.3)
 
+  packages/lang-typescript:
+    devDependencies:
+      '@reponova/lang-test-utils':
+        specifier: workspace:*
+        version: link:../lang-test-utils
+      reponova:
+        specifier: ^0.4.3
+        version: 0.4.3(apache-arrow@18.1.0)(typescript@5.9.3)
+      web-tree-sitter:
+        specifier: ^0.25.10
+        version: 0.25.10
+
   tools/bootstrap-plugin:
     devDependencies:
       tsx:

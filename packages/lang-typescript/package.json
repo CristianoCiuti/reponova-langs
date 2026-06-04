@@ -1,0 +1,51 @@
+{
+  "name": "@reponova/lang-typescript",
+  "version": "0.0.0",
+  "description": "TypeScript language support for RepoNova",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "grammars",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "prebuild": "pnpm -w grammar-fetch --package=lang-typescript",
+    "build": "tsup",
+    "pretest": "pnpm -w grammar-fetch --package=lang-typescript",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "peerDependencies": {
+    "reponova": "^0.4.0"
+  },
+  "devDependencies": {
+    "@reponova/lang-test-utils": "workspace:*",
+    "reponova": "^0.4.3",
+    "web-tree-sitter": "^0.25.10"
+  },
+  "reponova": {
+    "type": "language",
+    "id": "typescript",
+    "extensions": [
+      ".ts",
+      ".mts",
+      ".cts"
+    ],
+    "grammar": "./grammars/tree-sitter-typescript.wasm"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CristianoCiuti/reponova-langs.git",
+    "directory": "packages/lang-typescript"
+  },
+  "homepage": "https://github.com/CristianoCiuti/reponova-langs/tree/main/packages/lang-typescript"
+}

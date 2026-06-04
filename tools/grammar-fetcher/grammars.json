@@ -14,6 +14,20 @@
       },
       "sha256": "16108b50df4ee9a30168794252ab55e7c93bfc5765d7fa0aa3e335752c515f47",
       "size": 457883
+    },
+    {
+      "id": "tree-sitter-typescript",
+      "package": "lang-typescript",
+      "filename": "tree-sitter-typescript.wasm",
+      "source": {
+        "type": "github-release",
+        "owner": "tree-sitter",
+        "repo": "tree-sitter-typescript",
+        "tag": "v0.23.2",
+        "asset": "tree-sitter-typescript.wasm"
+      },
+      "sha256": "778025db5a8be0e70f8ccc3671e486dfeddd048c25d9e8a70c26de2e1bf6f97d",
+      "size": 1413849
     }
   ]
 }
