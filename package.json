@@ -15,9 +15,11 @@
     "lint": "eslint packages tools",
     "lint:fix": "eslint packages tools --fix",
     "scaffold": "pnpm --filter @reponova/scaffold start --",
+    "grammar-fetch": "pnpm --filter @reponova/grammar-fetcher start --",
+    "grammar-check": "pnpm --filter @reponova/grammar-fetcher start -- --check",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "pnpm build && pnpm test && changeset publish",
+    "release": "pnpm grammar-fetch && pnpm build && pnpm test && changeset publish",
     "clean": "pnpm -r exec rimraf dist node_modules && rimraf node_modules"
   },
   "devDependencies": {

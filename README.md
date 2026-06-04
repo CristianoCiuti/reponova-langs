@@ -25,10 +25,19 @@ Requirements: Node `>=18`, pnpm `9`.
 
 ```bash
 pnpm install
+pnpm grammar-fetch    # download tree-sitter .wasm grammars (one-time per clone / per bump)
 pnpm typecheck
 pnpm build
 pnpm test
 ```
+
+The `prebuild` and `pretest` hooks of plugins that ship a grammar (e.g. `lang-python`) call `grammar-fetch` automatically, so running `pnpm build` or `pnpm test` from a fresh clone also works without an explicit fetch step.
+
+### Grammars
+
+Tree-sitter `.wasm` grammars are **not committed to git**. They are pinned (version + SHA-256) in [`tools/grammar-fetcher/grammars.json`](./tools/grammar-fetcher/grammars.json), downloaded from upstream GitHub releases at build time, and bundled into each plugin's published npm tarball under `grammars/`.
+
+See [`tools/grammar-fetcher/README.md`](./tools/grammar-fetcher/README.md) for adding or bumping a grammar.
 
 ### Scaffold a new plugin
 

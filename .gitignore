@@ -8,3 +8,8 @@ dist/
 coverage/
 .turbo/
 *.tsbuildinfo
+
+# Grammar .wasm files are downloaded by tools/grammar-fetcher at build time.
+# They are NOT committed to git but ARE included in the published npm tarball.
+# The single source of truth for versions + SHA-256 is tools/grammar-fetcher/grammars.json.
+packages/*/grammars/*.wasm
