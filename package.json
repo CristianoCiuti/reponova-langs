@@ -17,6 +17,7 @@
     "scaffold": "pnpm --filter @reponova/scaffold start --",
     "grammar-fetch": "pnpm --filter @reponova/grammar-fetcher start --",
     "grammar-check": "pnpm --filter @reponova/grammar-fetcher start -- --check",
+    "trust:configure": "pnpm --filter @reponova/trust-configure start --",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm grammar-fetch && pnpm build && pnpm test && changeset publish",
