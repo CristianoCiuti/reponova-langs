@@ -22,9 +22,13 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
           registry-url: 'https://registry.npmjs.org'
+      # npm >= 11.5.1 is required for OIDC trusted publishing on npmjs.org.
+      # Node 22 ships with an older npm, so refresh it before publishing.
+      - name: Upgrade npm for OIDC trusted publishing
+        run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - name: Create release PR or publish
@@ -36,4 +40,7 @@ jobs:
           title: 'chore(release): version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # Enables npm provenance + OIDC trusted publishing.
+          # Each package needs a "Trusted Publisher" entry on npmjs.org
+          # pointing at CristianoCiuti/reponova-langs + this workflow.
+          NPM_CONFIG_PROVENANCE: 'true'
