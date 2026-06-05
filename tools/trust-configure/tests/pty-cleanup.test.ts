@@ -94,6 +94,11 @@ interface ChildOutcome {
  * stdin is `"ignore"` so `process.stdin.isTTY` is `false` inside the child;
  * the TTY-cleanup branch in `spawnNpmViaPty.onExit` is skipped. This is
  * the sanity-check half of the smoke test.
+ *
+ * cwd is pinned to `packageRoot` so that `--import tsx/esm` resolves the
+ * tsx loader through this package's local `node_modules` (Vitest happens
+ * to run from the same cwd today, but pinning makes the test independent
+ * of how it's invoked).
  */
 async function runHarnessNonTty(): Promise<ChildOutcome> {
   const tmp = mkdtempSync(join(tmpdir(), "trust-configure-pty-"));
@@ -107,8 +112,7 @@ async function runHarnessNonTty(): Promise<ChildOutcome> {
       ["--import", "tsx/esm", harnessPath],
       {
         stdio: ["ignore", "pipe", "pipe"],
-        // Use process.cwd() rather than packageRoot so test invariants don't
-        // depend on cwd (Vitest runs them from the package root anyway).
+        cwd: packageRoot,
         env: process.env,
       },
     );
@@ -138,6 +142,36 @@ async function runHarnessNonTty(): Promise<ChildOutcome> {
 }
 
 /**
+ * Probes `node-pty` to check whether the current host can allocate a
+ * pseudo-terminal at all. Returns `null` on success, or the error message
+ * on failure.
+ *
+ * The GitHub Actions `macos-latest` runners refuse `posix_spawnp(forkpty)`
+ * out of the box (we observed `posix_spawnp failed.` on Node 18/20/22).
+ * That's an environment limitation — nothing to do with the production
+ * fix — so the regression test that needs a real PTY is skipped on hosts
+ * where the syscall is unavailable. Linux and Windows runners pass.
+ */
+async function probePtyAvailability(): Promise<string | null> {
+  try {
+    const { spawn: ptySpawn } = await import("node-pty");
+    const probe = ptySpawn(process.execPath, ["--version"], {
+      name: "xterm-color",
+      cols: 80,
+      rows: 24,
+      cwd: process.cwd(),
+      env: process.env as Record<string, string | undefined>,
+    });
+    await new Promise<void>((resolveProbe) => {
+      probe.onExit(() => resolveProbe());
+    });
+    return null;
+  } catch (err) {
+    return (err as Error).message ?? String(err);
+  }
+}
+
+/**
  * Run the harness as a child whose stdin IS a real TTY, by launching it
  * through `node-pty`. This exercises the exact code path that leaked:
  * `setRawMode(true)` + `resume()` + `unref()` in `spawnNpmViaPty.onExit`.
@@ -161,7 +195,7 @@ async function runHarnessTty(): Promise<ChildOutcome> {
         name: "xterm-color",
         cols: 80,
         rows: 24,
-        cwd: process.cwd(),
+        cwd: packageRoot,
         env: process.env as Record<string, string | undefined>,
       },
     );
@@ -196,26 +230,34 @@ describe("spawnNpmViaPty: process-termination contract", () => {
     "child Node terminates within the budget when stdin is NOT a TTY (sanity check)",
     async () => {
       const r = await runHarnessNonTty();
-      expect(
-        r.killedByTimeout,
-        `child hung past ${CHILD_TIMEOUT_MS}ms; stdout=${r.stdout.slice(0, 200)}; stderr=${r.stderr.slice(0, 200)}`,
-      ).toBe(false);
-      expect(r.stdout).toMatch(/HARNESS_DONE exit=0/);
-      expect(r.exitCode).toBe(0);
+      const debug = `exit=${r.exitCode} elapsed=${r.elapsedMs}ms stdout=${JSON.stringify(r.stdout.slice(0, 400))} stderr=${JSON.stringify(r.stderr.slice(0, 400))}`;
+      expect(r.killedByTimeout, `child hung past ${CHILD_TIMEOUT_MS}ms; ${debug}`).toBe(false);
+      expect(r.stdout, `harness produced no expected marker; ${debug}`).toMatch(/HARNESS_DONE exit=0/);
+      expect(r.exitCode, `harness exited non-zero; ${debug}`).toBe(0);
     },
     CHILD_TIMEOUT_MS + 5_000,
   );
 
   it(
     "child Node terminates within the budget when stdin IS a TTY (regression for the trust-configure hang)",
-    async () => {
+    async (ctx) => {
+      // GH Actions `macos-latest` runners refuse `posix_spawnp(forkpty)`,
+      // which makes `node-pty` unable to allocate a PTY at all on that
+      // host. That's an environment limitation, not a regression in the
+      // production fix — Linux and Windows runners exercise the same
+      // code path. Skip rather than red-X CI on hosts that can't host
+      // the test infrastructure.
+      const ptyError = await probePtyAvailability();
+      if (ptyError !== null) {
+        ctx.skip(`PTY unavailable on this host (${ptyError}); the production fix still applies but cannot be smoke-tested here`);
+        return;
+      }
+
       const r = await runHarnessTty();
-      expect(
-        r.killedByTimeout,
-        `child hung past ${CHILD_TIMEOUT_MS}ms (the bug reproduces); stdout=${r.stdout.slice(0, 400)}`,
-      ).toBe(false);
-      expect(r.stdout).toMatch(/HARNESS_DONE exit=0/);
-      expect(r.exitCode).toBe(0);
+      const debug = `exit=${r.exitCode} elapsed=${r.elapsedMs}ms stdout=${JSON.stringify(r.stdout.slice(0, 600))}`;
+      expect(r.killedByTimeout, `child hung past ${CHILD_TIMEOUT_MS}ms (the bug reproduces); ${debug}`).toBe(false);
+      expect(r.stdout, `harness produced no expected marker; ${debug}`).toMatch(/HARNESS_DONE exit=0/);
+      expect(r.exitCode, `harness exited non-zero; ${debug}`).toBe(0);
     },
     CHILD_TIMEOUT_MS + 5_000,
   );
