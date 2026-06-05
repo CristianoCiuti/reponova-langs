@@ -13,9 +13,8 @@ Each npm package on npmjs.com can have **one** Trusted Publisher entry. There is
 | Provider | GitHub Actions |
 | Repository | `CristianoCiuti/reponova-langs` |
 | Workflow filename | `release.yml` |
-| Permission | `--allow-publish` |
 
-After this runs once, the `release.yml` workflow can publish each package via OIDC, with **no `NPM_TOKEN` secret** required.
+After this runs once, the `release.yml` workflow can publish each package via OIDC, with **no `NPM_TOKEN` secret** required. (Permission to publish is the entire point of the trust relationship — there is no separate flag for it.)
 
 ## Prerequisites
 
@@ -45,7 +44,7 @@ pnpm trust:configure --apply
 The script:
 
 - Discovers every non-private `@reponova/lang-*` package via `packages/*/package.json`
-- Runs `npm trust github <pkg> --repo CristianoCiuti/reponova-langs --file release.yml --allow-publish --yes` for each
+- Runs `npm trust github <pkg> --repo CristianoCiuti/reponova-langs --file release.yml --yes` for each
 - Sleeps 2 seconds between calls (npm registry rate-limit friendly)
 - Reports a summary at the end and exits non-zero if any package failed
 
