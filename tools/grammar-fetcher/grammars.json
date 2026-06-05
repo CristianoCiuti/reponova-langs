@@ -28,6 +28,20 @@
       },
       "sha256": "778025db5a8be0e70f8ccc3671e486dfeddd048c25d9e8a70c26de2e1bf6f97d",
       "size": 1413849
+    },
+    {
+      "id": "tree-sitter-tsx",
+      "package": "lang-tsx",
+      "filename": "tree-sitter-tsx.wasm",
+      "source": {
+        "type": "github-release",
+        "owner": "tree-sitter",
+        "repo": "tree-sitter-typescript",
+        "tag": "v0.23.2",
+        "asset": "tree-sitter-tsx.wasm"
+      },
+      "sha256": "79e5da75ea62855a0cd67177685f0164eac87d5f630b3cbe1e0a099751ad30f8",
+      "size": 1445638
     }
   ]
 }
