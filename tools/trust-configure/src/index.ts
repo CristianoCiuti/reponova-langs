@@ -157,19 +157,159 @@ export function buildTrustArgs(
   ];
 }
 
+/**
+ * A single trust entry as returned by `npm trust list <pkg> --json` for the
+ * `github` provider. The shape mirrors `lib/commands/trust/github.js`'s
+ * `bodyToOptions` plus the `permissions` array that the trust-cmd layer
+ * appends when serialising as JSON.
+ */
+export interface TrustEntry {
+  readonly id?: string;
+  readonly type?: string;
+  readonly file?: string;
+  readonly repository?: string;
+  readonly environment?: string;
+  readonly permissions?: readonly string[];
+}
+
+/**
+ * Parses the stdout of `npm trust list <pkg> --json`.
+ *
+ * For a single trust the CLI prints one bare object; for multiple trusts it
+ * prints them back-to-back (still as bare objects, not a JSON array — see
+ * `displayResponseBody` in `lib/trust-cmd.js`). We accept both, plus any
+ * leading/trailing blank lines, and gracefully degrade to `[]` on any
+ * unparseable input.
+ *
+ * Exported so it can be unit-tested without touching the network.
+ */
+export function parseTrustListOutput(stdout: string): TrustEntry[] {
+  const trimmed = stdout.trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    // Multiple bare JSON objects concatenated. Insert commas between them
+    // (`}\n{` -> `},\n{`) and wrap in `[ ... ]` to feed JSON.parse.
+    try {
+      const arrayLike = `[${trimmed.replace(/}\s*\n+\s*{/g, "},\n{")}]`;
+      const parsed = JSON.parse(arrayLike);
+      return Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      return [];
+    }
+  }
+}
+
+/**
+ * Returns true iff `entry` is the same trust we would create from
+ * `(repo, workflow)` for the `github` provider.
+ *
+ * We don't compare the `permissions` array because the registry historically
+ * served different presets (e.g. just `["createPackage"]` from CLI, or
+ * `["createPackage", "createStagedPackage"]` from the legacy npmjs.com UI).
+ * Both give CI the publish capability we need; matching only on provider +
+ * repo + workflow keeps the check idempotent for any pre-existing config.
+ *
+ * Exported for unit tests.
+ */
+export function trustEntryMatches(
+  entry: TrustEntry | null | undefined,
+  repo: string,
+  workflow: string,
+): boolean {
+  if (!entry) return false;
+  return (
+    entry.type === "github" &&
+    entry.repository === repo &&
+    entry.file === workflow
+  );
+}
+
+/**
+ * Reads the existing trust config for `pkgName` via `npm trust list`.
+ *
+ * BEST-EFFORT: the registry's `GET /-/package/<pkg>/trust` endpoint does
+ * require OTP (verified empirically — both via `npm trust list` and via a
+ * raw bearer-only HTTPS GET, both return 401). So this call only succeeds
+ * when the user is inside a webauth cooldown. When it fails (EOTP, E401,
+ * network, …) we silently fall back to `null` and let `configureTrust`
+ * proceed; the canonical 409-Conflict idempotency path then handles
+ * already-configured packages.
+ */
+function findExistingMatchingTrust(pkgName: string): TrustEntry | null {
+  const r = spawnSync(
+    "npm",
+    ["trust", "list", pkgName, "--json"],
+    { encoding: "utf8", shell: true },
+  );
+  if (r.status !== 0) return null;
+  const entries = parseTrustListOutput(r.stdout ?? "");
+  return entries.find((e) => trustEntryMatches(e, REPO, WORKFLOW)) ?? null;
+}
+
+/**
+ * Detects npm's "trust already exists" 409 from stderr.
+ *
+ * `npm trust github` prints `npm error code E409` plus
+ * `npm error 409 Conflict - POST .../trust`. We treat that as the canonical
+ * "this trust already exists" signal and short-circuit to `skipped`.
+ *
+ * Exported for unit tests.
+ */
+export function looksLikeAlreadyConfigured(stderr: string): boolean {
+  if (!stderr) return false;
+  return (
+    stderr.includes("npm error code E409") ||
+    stderr.includes("code E409") ||
+    /\b409 Conflict\b/.test(stderr)
+  );
+}
+
 // On Windows, `npm` is `npm.cmd` (a batch file): Node's `spawnSync` cannot
 // invoke it directly, so we always go through the shell. On POSIX `shell: true`
 // is harmless. Same pattern as `tools/bootstrap-plugin/src/index.ts`.
-function configureTrust(pkgName: string): boolean {
+function configureTrust(pkgName: string): "ok" | "skipped" | "failed" {
+  // FAST-PATH idempotency check (best-effort): when the user is inside an
+  // npm webauth cooldown, `npm trust list` succeeds without a fresh OTP
+  // and lets us skip already-configured packages with zero security-key
+  // taps. Outside the cooldown the call fails with EOTP and we fall
+  // through to the canonical 409-Conflict path below.
+  const existing = findExistingMatchingTrust(pkgName);
+  if (existing) {
+    console.log(
+      `[trust-configure]   already configured (id=${existing.id ?? "?"}) — skipping`,
+    );
+    return "skipped";
+  }
+
   const args = buildTrustArgs(pkgName);
   console.log(`[trust-configure] $ npm ${args.join(" ")}`);
-  const r = spawnSync("npm", args, { stdio: "inherit", shell: true });
+  // stdin/stdout stay inherited so the user can see/operate the webauth
+  // prompt; stderr is piped so we can pattern-match the 409 idempotency
+  // signal afterwards. We always re-emit captured stderr verbatim so the
+  // operator UX is unchanged.
+  const r = spawnSync("npm", args, {
+    stdio: ["inherit", "inherit", "pipe"],
+    encoding: "utf8",
+    shell: true,
+  });
+  if (r.stderr) {
+    process.stderr.write(r.stderr);
+  }
   if (r.status === 0) {
     console.log(`[trust-configure]   ok`);
-    return true;
+    return "ok";
+  }
+  if (looksLikeAlreadyConfigured(r.stderr ?? "")) {
+    console.log(
+      `[trust-configure]   already configured (registry returned 409) — skipping`,
+    );
+    return "skipped";
   }
   console.error(`[trust-configure]   failed (exit ${r.status})`);
-  return false;
+  return "failed";
 }
 
 function sleep(ms: number): Promise<void> {
@@ -235,13 +375,16 @@ async function main(): Promise<void> {
   console.log("");
 
   let ok = 0;
+  let skipped = 0;
   let failed = 0;
   for (let i = 0; i < pkgs.length; i++) {
     const pkg = pkgs[i]!;
     console.log(`[trust-configure] [${i + 1}/${pkgs.length}] ${pkg.name}`);
-    const success = configureTrust(pkg.name);
-    if (success) {
+    const result = configureTrust(pkg.name);
+    if (result === "ok") {
       ok++;
+    } else if (result === "skipped") {
+      skipped++;
     } else {
       failed++;
     }
@@ -252,7 +395,9 @@ async function main(): Promise<void> {
   }
 
   console.log("");
-  console.log(`[trust-configure] done: ${ok} ok, ${failed} failed`);
+  console.log(
+    `[trust-configure] done: ${ok} ok, ${skipped} already-configured (skipped), ${failed} failed`,
+  );
   if (failed > 0) {
     process.exit(1);
   }
