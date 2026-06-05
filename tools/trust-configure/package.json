@@ -14,6 +14,7 @@
     "build": "echo 'trust-configure is invoked via tsx - no build needed'"
   },
   "devDependencies": {
+    "node-pty": "^1.1.0",
     "tsx": "^4.19.0"
   },
   "license": "MIT"

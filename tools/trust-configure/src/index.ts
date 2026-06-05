@@ -25,6 +25,31 @@
  *     bypasses and forces a fresh webauth handshake on every call)
  *   - The package must already exist on npm (first publish must be a manual
  *     `npm publish` with OTP, or via the npm UI's Trusted Publisher setup)
+ *
+ * Why a real PTY (`node-pty`) instead of `child_process.spawn`?
+ *
+ * `npm trust github` performs a webauth-style 2FA challenge that requires a
+ * real TTY on stdin/stdout. The previous implementation used
+ * `child_process.spawnSync('npm', ..., { stdio: ['inherit','inherit','pipe'],
+ * shell: true })`, which on Windows interposes `cmd.exe /c npm.cmd ...` and
+ * pipes stderr to a non-TTY pipe. That combination crashed the npm CLI's
+ * webauth handler with `STATUS_STACK_BUFFER_OVERRUN` (exit code 3221226505 =
+ * 0xC0000409) the moment the registry demanded a fresh OTP, leaving the
+ * monorepo's first-publish flow stuck.
+ *
+ * This implementation routes the npm process through a `node-pty` PTY:
+ *   - Windows uses ConPTY (Windows >= 10 1809), prebuilt and shipped with
+ *     `node-pty`.
+ *   - POSIX uses pty.h.
+ * Both surfaces give the npm CLI a genuine TTY to talk to, so webauth's
+ * `isatty()` checks succeed and the 2FA handshake completes. We forward
+ * stdin (in raw mode), stdout, terminal resize, and SIGINT between the
+ * parent terminal and the PTY for full interactive parity.
+ *
+ * The fast-path read (`npm trust list --json`) keeps using plain
+ * `child_process.spawnSync` because it is non-interactive and either succeeds
+ * (operator inside the webauth cooldown) or fails silently (we then proceed
+ * to the write path).
  */
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -85,7 +110,9 @@ Prerequisites for --apply:
   - Logged in: \`npm login\`
   - 2FA in "auth-and-writes" mode (every trust call triggers a fresh
     webauth handshake regardless of OTP bypass settings)
-  - Each package must already exist on npm (first publish must be manual)`);
+  - Each package must already exist on npm (first publish must be manual)
+  - An interactive terminal (a real TTY); the script pipes stdin/stdout to
+    a node-pty pseudo-terminal so the npm webauth prompt can read your OTP.`);
 }
 
 function repoRoot(): string {
@@ -234,9 +261,11 @@ export function trustEntryMatches(
  * require OTP (verified empirically — both via `npm trust list` and via a
  * raw bearer-only HTTPS GET, both return 401). So this call only succeeds
  * when the user is inside a webauth cooldown. When it fails (EOTP, E401,
- * network, …) we silently fall back to `null` and let `configureTrust`
- * proceed; the canonical 409-Conflict idempotency path then handles
- * already-configured packages.
+ * network, …) we silently fall back to `null` and let the caller proceed
+ * to either the write path (interactive, with PTY) or the post-mortem
+ * idempotency check.
+ *
+ * Non-interactive: this is just a read, no TTY required.
  */
 function findExistingMatchingTrust(pkgName: string): TrustEntry | null {
   const r = spawnSync(
@@ -254,7 +283,12 @@ function findExistingMatchingTrust(pkgName: string): TrustEntry | null {
  *
  * `npm trust github` prints `npm error code E409` plus
  * `npm error 409 Conflict - POST .../trust`. We treat that as the canonical
- * "this trust already exists" signal and short-circuit to `skipped`.
+ * "this trust already exists" signal.
+ *
+ * The PTY-based code path replaces direct stderr-pattern-matching with a
+ * post-mortem `npm trust list` read, which is more robust (the npm CLI may
+ * change error wording across versions). This helper is kept exported for
+ * downstream consumers and for future reintroduction if needed.
  *
  * Exported for unit tests.
  */
@@ -267,49 +301,200 @@ export function looksLikeAlreadyConfigured(stderr: string): boolean {
   );
 }
 
-// On Windows, `npm` is `npm.cmd` (a batch file): Node's `spawnSync` cannot
-// invoke it directly, so we always go through the shell. On POSIX `shell: true`
-// is harmless. Same pattern as `tools/bootstrap-plugin/src/index.ts`.
-function configureTrust(pkgName: string): "ok" | "skipped" | "failed" {
-  // FAST-PATH idempotency check (best-effort): when the user is inside an
-  // npm webauth cooldown, `npm trust list` succeeds without a fresh OTP
-  // and lets us skip already-configured packages with zero security-key
-  // taps. Outside the cooldown the call fails with EOTP and we fall
-  // through to the canonical 409-Conflict path below.
-  const existing = findExistingMatchingTrust(pkgName);
+/**
+ * Returns true iff stdin AND stdout both look like a real TTY. The npm CLI's
+ * webauth handler checks `process.stdout.isTTY` to decide whether to pop a
+ * webauth prompt vs return EOTP; if stdin is also a TTY it then expects to
+ * read the OTP back. Without both, the webauth handshake fails (or, on
+ * Windows, crashes with STATUS_STACK_BUFFER_OVERRUN).
+ *
+ * Exported for unit testability.
+ */
+export function isInteractiveTty(): boolean {
+  return process.stdin.isTTY === true && process.stdout.isTTY === true;
+}
+
+/**
+ * Spawns `npm <args>` inside a PTY (via `node-pty`) and forwards stdin/stdout/
+ * resize/SIGINT between the parent terminal and the child. Returns the exit
+ * code emitted by the PTY when the child terminates.
+ *
+ * The PTY allocation is deferred to call time (and the import is dynamic) so
+ * tests that never enter the write path don't pay the native-binding load.
+ */
+async function spawnNpmViaPty(
+  args: readonly string[],
+): Promise<{ exitCode: number | null }> {
+  const { spawn: ptySpawn } = await import("node-pty");
+  const npmExe = process.platform === "win32" ? "npm.cmd" : "npm";
+  const cols = process.stdout.columns ?? 80;
+  const rows = process.stdout.rows ?? 24;
+
+  const pty = ptySpawn(npmExe, [...args], {
+    name: "xterm-color",
+    cols,
+    rows,
+    cwd: process.cwd(),
+    env: process.env as Record<string, string | undefined>,
+  });
+
+  return new Promise<{ exitCode: number | null }>((resolve) => {
+    const dataDisposable = pty.onData((data) => {
+      process.stdout.write(data);
+    });
+
+    const onStdin = (chunk: Buffer): void => {
+      pty.write(chunk.toString("utf8"));
+    };
+
+    const wasRaw = process.stdin.isRaw === true;
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.on("data", onStdin);
+    }
+
+    const onResize = (): void => {
+      const newCols = process.stdout.columns ?? cols;
+      const newRows = process.stdout.rows ?? rows;
+      try {
+        pty.resize(newCols, newRows);
+      } catch {
+        // pty may have just exited; ignore.
+      }
+    };
+    process.stdout.on("resize", onResize);
+
+    const onSigint = (): void => {
+      try {
+        // node-pty on Windows refuses non-default signals; fall back to
+        // the bare kill() (SIGHUP-equivalent) which closes the ConPTY.
+        if (process.platform === "win32") {
+          pty.kill();
+        } else {
+          pty.kill("SIGINT");
+        }
+      } catch {
+        // ignore
+      }
+    };
+    process.on("SIGINT", onSigint);
+
+    const exitDisposable = pty.onExit(({ exitCode }) => {
+      dataDisposable.dispose();
+      exitDisposable.dispose();
+      if (process.stdin.isTTY) {
+        process.stdin.off("data", onStdin);
+        process.stdin.pause();
+        try {
+          process.stdin.setRawMode(wasRaw);
+        } catch {
+          // Restoring raw-mode on a stdin that's already been closed
+          // throws; safe to ignore at this point.
+        }
+      }
+      process.stdout.off("resize", onResize);
+      process.off("SIGINT", onSigint);
+      resolve({ exitCode: typeof exitCode === "number" ? exitCode : null });
+    });
+  });
+}
+
+/**
+ * Dependencies of `configureTrustWith`. Injected so the function can be
+ * unit-tested without touching the npm registry, the network, or a real PTY.
+ */
+export interface ConfigureTrustDeps {
+  readonly findExistingTrust: (pkgName: string) => TrustEntry | null;
+  readonly spawnNpm: (
+    args: readonly string[],
+  ) => Promise<{ exitCode: number | null }>;
+  readonly isInteractive: () => boolean;
+  readonly log: (msg: string) => void;
+  readonly warn: (msg: string) => void;
+}
+
+export type ConfigureTrustResult = "ok" | "skipped" | "failed";
+
+/**
+ * Pure-functional core of the trust configuration step. The branching here
+ * is the contract the unit tests pin down:
+ *
+ *   1. Fast-path (read, no OTP needed if the operator is inside a cooldown):
+ *      if a matching trust is already present, return "skipped".
+ *   2. TTY guard: writing requires a fresh 2FA via webauth, which needs a
+ *      real TTY. If we're not in one (CI, IDE shell wrapper without pty,
+ *      headless cron) we bail out with the exact command the operator can
+ *      paste into a real terminal — never crash.
+ *   3. Spawn `npm trust github ...` via the injected `spawnNpm`. On a clean
+ *      exit (status 0) we're done.
+ *   4. Post-mortem idempotency: if the spawn failed, re-read the trust list.
+ *      The fresh webauth that just ran should have rinsed any cooldown so
+ *      this read succeeds. If the trust is now present, the spawn's failure
+ *      was a 409 Conflict (someone beat us, or we're re-running after a
+ *      partial bootstrap) and we classify as "skipped".
+ *   5. Otherwise the failure is real and we return "failed".
+ *
+ * Exported for unit testing.
+ */
+export async function configureTrustWith(
+  pkgName: string,
+  deps: ConfigureTrustDeps,
+): Promise<ConfigureTrustResult> {
+  const existing = deps.findExistingTrust(pkgName);
   if (existing) {
-    console.log(
+    deps.log(
       `[trust-configure]   already configured (id=${existing.id ?? "?"}) — skipping`,
     );
     return "skipped";
   }
 
-  const args = buildTrustArgs(pkgName);
-  console.log(`[trust-configure] $ npm ${args.join(" ")}`);
-  // stdin/stdout stay inherited so the user can see/operate the webauth
-  // prompt; stderr is piped so we can pattern-match the 409 idempotency
-  // signal afterwards. We always re-emit captured stderr verbatim so the
-  // operator UX is unchanged.
-  const r = spawnSync("npm", args, {
-    stdio: ["inherit", "inherit", "pipe"],
-    encoding: "utf8",
-    shell: true,
-  });
-  if (r.stderr) {
-    process.stderr.write(r.stderr);
+  if (!deps.isInteractive()) {
+    deps.warn(
+      `[trust-configure]   no interactive TTY available; cannot complete the webauth handshake here.`,
+    );
+    deps.warn(
+      `[trust-configure]   run this command from a real terminal to finish:`,
+    );
+    const argv = buildTrustArgs(pkgName);
+    deps.warn(`[trust-configure]     npm ${argv.join(" ")}`);
+    return "failed";
   }
-  if (r.status === 0) {
-    console.log(`[trust-configure]   ok`);
+
+  const args = buildTrustArgs(pkgName);
+  deps.log(`[trust-configure] $ npm ${args.join(" ")}`);
+  const r = await deps.spawnNpm(args);
+
+  if (r.exitCode === 0) {
+    deps.log(`[trust-configure]   ok`);
     return "ok";
   }
-  if (looksLikeAlreadyConfigured(r.stderr ?? "")) {
-    console.log(
-      `[trust-configure]   already configured (registry returned 409) — skipping`,
+
+  // Post-mortem idempotency check: the spawn failed, but if the trust is
+  // now present, the registry rejected our POST with 409 Conflict.
+  const after = deps.findExistingTrust(pkgName);
+  if (after) {
+    deps.log(
+      `[trust-configure]   already configured (post-mortem confirmed, id=${after.id ?? "?"}) — skipping`,
     );
     return "skipped";
   }
-  console.error(`[trust-configure]   failed (exit ${r.status})`);
+
+  deps.warn(
+    `[trust-configure]   failed (exit ${r.exitCode === null ? "n/a" : r.exitCode})`,
+  );
   return "failed";
+}
+
+/** Wires real production dependencies for `configureTrustWith`. */
+async function configureTrust(pkgName: string): Promise<ConfigureTrustResult> {
+  return configureTrustWith(pkgName, {
+    findExistingTrust: findExistingMatchingTrust,
+    spawnNpm: spawnNpmViaPty,
+    isInteractive: isInteractiveTty,
+    log: (msg) => console.log(msg),
+    warn: (msg) => console.error(msg),
+  });
 }
 
 function sleep(ms: number): Promise<void> {
@@ -380,7 +565,7 @@ async function main(): Promise<void> {
   for (let i = 0; i < pkgs.length; i++) {
     const pkg = pkgs[i]!;
     console.log(`[trust-configure] [${i + 1}/${pkgs.length}] ${pkg.name}`);
-    const result = configureTrust(pkg.name);
+    const result = await configureTrust(pkg.name);
     if (result === "ok") {
       ok++;
     } else if (result === "skipped") {
