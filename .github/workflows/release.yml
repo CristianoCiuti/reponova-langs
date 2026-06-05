@@ -4,22 +4,32 @@ on:
   push:
     branches: [main]
 
+# Don't cancel a publish in flight just because a new push lands on main.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  release:
+  # ---------------------------------------------------------------------------
+  # 1) Versioning
+  # ---------------------------------------------------------------------------
+  # When `.changeset/*.md` (excluding README.md) are present on `main`, this
+  # job opens or updates the "Version Packages" PR via changesets/action,
+  # using a GitHub App token so the PR is owned by the App (PRs opened by
+  # github-actions[bot] do NOT trigger workflows and would never satisfy
+  # branch protection's required status checks).
+  #
+  # If no changeset is pending (i.e. the Version PR was just merged), this job
+  # is a no-op and downstream jobs (`detect` + `publish`) take over.
+  # ---------------------------------------------------------------------------
+  versioning:
     runs-on: ubuntu-latest
     permissions:
-      contents: read       # safe default - reads only
-      id-token: write      # required for npm OIDC trusted publishing
+      contents: write
+      pull-requests: write
+    outputs:
+      hasPendingChangesets: ${{ steps.check.outputs.has }}
     steps:
-      # A short-lived (1 hour) installation token from a dedicated GitHub App.
-      # The App is what owns the "Version Packages" PR, which is essential:
-      # PRs opened by github-actions[bot] (the default GITHUB_TOKEN identity)
-      # do NOT trigger workflows, so they would never satisfy branch
-      # protection's required status checks. PRs opened by a GitHub App do.
       - name: Generate GitHub App installation token
         id: app-token
         uses: actions/create-github-app-token@v2
@@ -31,6 +41,138 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
+
+      - name: Detect pending changesets
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          if compgen -G ".changeset/*.md" >/dev/null; then
+            count=$(find .changeset -maxdepth 1 -type f -name '*.md' ! -name 'README.md' | wc -l)
+          fi
+          echo "Pending changesets: $count"
+          if [ "$count" -gt 0 ]; then
+            echo "has=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: pnpm/action-setup@v4
+        if: steps.check.outputs.has == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.has == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.check.outputs.has == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Open or update Version PR
+        if: steps.check.outputs.has == 'true'
+        uses: changesets/action@v1
+        with:
+          version: pnpm version-packages
+          commit: 'chore(release): version packages'
+          title: 'chore(release): version packages'
+          # NOTE: no `publish:` field. Publishing is handled by the matrix
+          # below so that each package is independent and a single failure
+          # cannot block the others.
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+
+  # ---------------------------------------------------------------------------
+  # 2) Detect — enumerate packages to publish
+  # ---------------------------------------------------------------------------
+  # Walks `packages/lang-*` and emits a JSON matrix of packages whose local
+  # version is NOT yet on the npm registry. Skips entries that are private or
+  # whose name does not match `@reponova/lang-*`.
+  #
+  # Only runs on the same workflow run that the versioning job classified as
+  # "no pending changesets" — i.e. the run that follows the Version PR merge.
+  # ---------------------------------------------------------------------------
+  detect:
+    needs: versioning
+    if: needs.versioning.outputs.hasPendingChangesets == 'false'
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.compute.outputs.matrix }}
+      anyToPublish: ${{ steps.compute.outputs.anyToPublish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Compute publish matrix
+        id: compute
+        shell: bash
+        run: |
+          set -euo pipefail
+          entries=()
+          for pkg_dir in packages/lang-*; do
+            [ -f "$pkg_dir/package.json" ] || continue
+            name=$(node -p "require('./$pkg_dir/package.json').name || ''")
+            version=$(node -p "require('./$pkg_dir/package.json').version || ''")
+            private=$(node -p "(require('./$pkg_dir/package.json').private === true).toString()")
+
+            if [ "$private" = "true" ]; then continue; fi
+            if [ -z "$name" ] || [ -z "$version" ]; then continue; fi
+            case "$name" in
+              @reponova/lang-*) ;;
+              *) continue ;;
+            esac
+
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "::notice title=$name@$version::already on npm registry, skipping"
+              continue
+            fi
+
+            dir=$(basename "$pkg_dir")
+            entries+=("{\"name\":\"$name\",\"version\":\"$version\",\"dir\":\"$dir\"}")
+            echo "::notice title=$name@$version::queued for publish"
+          done
+
+          if [ ${#entries[@]} -eq 0 ]; then
+            matrix='[]'
+            any='false'
+          else
+            matrix="[$(IFS=,; echo "${entries[*]}")]"
+            any='true'
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "anyToPublish=$any" >> "$GITHUB_OUTPUT"
+          echo "Publish matrix: $matrix"
+
+  # ---------------------------------------------------------------------------
+  # 3) Publish — one job per package, fully independent
+  # ---------------------------------------------------------------------------
+  # `fail-fast: false` is the architectural cornerstone of this workflow:
+  # any single package's failure (e.g. a brand-new package whose Trusted
+  # Publisher does not exist on npm yet) does NOT abort the publish of the
+  # others. Each step is idempotent so re-runs after a manual recovery
+  # (e.g. `pnpm bootstrap-plugin lang-<id>`) safely converge to green.
+  # ---------------------------------------------------------------------------
+  publish:
+    needs: detect
+    if: needs.detect.outputs.anyToPublish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # for git tag push and GH Release create
+      id-token: write       # for npm OIDC trusted publishing
+    strategy:
+      fail-fast: false
+      matrix:
+        pkg: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need full history + all tags for idempotent tag check
 
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -45,23 +187,64 @@ jobs:
         run: npm install -g npm@latest
 
       - run: pnpm install --frozen-lockfile
-      # Populate packages/*/grammars/*.wasm from upstream releases (verified by SHA-256)
-      # so each published tarball ships the pinned grammar declared in the manifest.
+      # Populate packages/*/grammars/*.wasm from upstream releases (verified
+      # by SHA-256) so each published tarball ships the pinned grammar.
       - run: pnpm grammar-fetch
-      - run: pnpm build
 
-      - name: Create release PR or publish
-        uses: changesets/action@v1
-        with:
-          publish: pnpm release
-          version: pnpm version-packages
-          commit: 'chore(release): version packages'
-          title: 'chore(release): version packages'
+      - name: Build target package
+        run: pnpm --filter "${{ matrix.pkg.name }}" build
+
+      - name: Publish to npm via OIDC (idempotent)
         env:
-          # App token, NOT secrets.GITHUB_TOKEN: this makes the PR appear as
-          # opened by the App and lets CI run on it normally.
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          # Enables npm provenance + OIDC trusted publishing.
-          # Each package must have a Trusted Publisher entry on npmjs.org
-          # pointing at CristianoCiuti/reponova-langs + release.yml.
           NPM_CONFIG_PROVENANCE: 'true'
+          PKG_NAME: ${{ matrix.pkg.name }}
+          PKG_VERSION: ${{ matrix.pkg.version }}
+          PKG_DIR: ${{ matrix.pkg.dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if npm view "$PKG_NAME@$PKG_VERSION" version >/dev/null 2>&1; then
+            echo "$PKG_NAME@$PKG_VERSION already on registry — skipping publish"
+            exit 0
+          fi
+          cd "packages/$PKG_DIR"
+          npm publish --access public
+
+      - name: Create and push git tag (idempotent)
+        env:
+          TAG: ${{ matrix.pkg.name }}@${{ matrix.pkg.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists locally — skipping"
+            exit 0
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists on origin — skipping"
+            exit 0
+          fi
+          git tag "$TAG"
+          git push origin "refs/tags/$TAG"
+
+      - name: Create GitHub Release (idempotent)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ matrix.pkg.name }}@${{ matrix.pkg.version }}
+          PKG_VERSION: ${{ matrix.pkg.version }}
+          PKG_DIR: ${{ matrix.pkg.dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "GH Release $TAG already exists — skipping"
+            exit 0
+          fi
+          notes_file=$(mktemp)
+          if node .github/scripts/extract-changelog.mjs \
+              "packages/$PKG_DIR/CHANGELOG.md" "$PKG_VERSION" > "$notes_file"; then
+            gh release create "$TAG" --title "$TAG" --notes-file "$notes_file"
+          else
+            echo "::warning title=$TAG::CHANGELOG section not found, falling back to auto-generated notes"
+            gh release create "$TAG" --title "$TAG" --generate-notes
+          fi

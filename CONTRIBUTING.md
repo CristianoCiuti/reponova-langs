@@ -23,10 +23,7 @@ The `prebuild` and `pretest` hooks of plugins that ship a tree-sitter grammar (e
 
 ```
 packages/
-  lang-typescript/       # @reponova/lang-typescript  (published)
-  lang-python/           # @reponova/lang-python      (published)
-  lang-plantuml/         # @reponova/lang-plantuml    (published)
-  lang-svg/              # @reponova/lang-svg         (published)
+  lang-*/                # @reponova/lang-*  (one published plugin per language / asset type)
   lang-test-utils/       # internal: shared test helpers
   scaffold/              # internal: `pnpm scaffold` CLI
 tools/
@@ -50,7 +47,7 @@ Each `@reponova/lang-*` package on npmjs.com is configured with a GitHub Actions
 A brand-new plugin needs a one-time bootstrap because npm has a chicken-and-egg constraint between Trusted Publisher configuration and the first OIDC publish. Use the helper:
 
 ```bash
-pnpm bootstrap-plugin lang-<id>   # publish + configure trust, ~90s
+pnpm bootstrap-plugin lang-<id>   # publish + trust + tag + GitHub Release
 ```
 
 After this runs once, every subsequent release is fully automated via CI. See [`tools/bootstrap-plugin/README.md`](./tools/bootstrap-plugin/README.md) and [`tools/trust-configure/README.md`](./tools/trust-configure/README.md) for the full operational procedure.
@@ -65,16 +62,38 @@ This generates a new package under `packages/lang-<id>/` with the workspace conv
 
 ## Release process
 
-Releases are managed via [Changesets](https://github.com/changesets/changesets):
+Releases are managed via [Changesets](https://github.com/changesets/changesets) and a release workflow that publishes each `@reponova/lang-*` package **independently** in a `fail-fast: false` matrix. A failure on one package never blocks the others, and every step (npm publish / git tag / GitHub Release) is idempotent so re-runs after a manual recovery converge to green.
+
+### Day-to-day flow (single, unified)
 
 ```bash
-pnpm changeset           # describe a change (creates .changeset/<random>.md)
-pnpm version-packages    # apply version bumps + regenerate CHANGELOG.md locally
-# push to `main` → GitHub Actions opens / updates the "Version Packages" PR
-# merging that PR triggers the release workflow → npm publish via OIDC
+pnpm changeset           # describe a change → .changeset/<random>.md
+git commit / push / open PR / merge PR
+# 1. CI opens (or updates) the "Version Packages" PR via changesets/action.
+# 2. Merge the Version PR.
+# 3. The Release workflow runs three jobs in order:
+#      versioning  → no-op (no pending changesets)
+#      detect      → enumerates packages with a version not yet on npm
+#      publish     → matrix, one job per package, fail-fast: false
+#                    each job: npm publish (OIDC) → git tag → gh release
 ```
 
-For new plugins, run `pnpm bootstrap-plugin lang-<id>` once before relying on the automated CI release flow.
+For an already-bootstrapped package, this is everything: every job is green, npm and GitHub Releases stay in lock-step, no manual step required.
+
+### When a publish-matrix job fails (one-time per new plugin, or rare flakes)
+
+The very first time a new `@reponova/lang-*` is bumped past `0.0.0`, its publish job will fail because npm cannot accept an OIDC publish without a pre-existing Trusted Publisher entry. The same recovery procedure applies to any other isolated job failure (network flake, npm outage, etc.):
+
+```bash
+git checkout main
+git pull
+pnpm install
+pnpm bootstrap-plugin lang-<id>      # publish + trust + tag + release, all idempotent
+```
+
+Then on the GitHub Actions UI of the failing run, click **Re-run failed jobs**. Each step of the matrix detects the work as already done (version on registry, tag on origin, release exists) and skips: the run flips to all-green.
+
+The same `bootstrap-plugin` invocation is also safe to run *before* merging the Version PR (on the `changeset-release/main` branch) if you want to avoid the red run entirely; the result is identical.
 
 ## Coding conventions
 
