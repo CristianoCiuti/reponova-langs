@@ -321,8 +321,38 @@ export function isInteractiveTty(): boolean {
  *
  * The PTY allocation is deferred to call time (and the import is dynamic) so
  * tests that never enter the write path don't pay the native-binding load.
+ *
+ * Process-termination contract (the reason this function is exported):
+ *
+ * After `onExit` fires we MUST release every async resource that would
+ * otherwise keep the parent Node event loop alive past the awaited
+ * `Promise<{ exitCode }>`. The hangs the previous version produced were
+ * traced to two leaks:
+ *
+ *   1. `node-pty` keeps the ConPTY agent / pty.h side resources alive
+ *      after the child exits unless `pty.kill()` is called explicitly.
+ *      The native binding registers libuv handles that hold the loop
+ *      open. `pty.kill()` is idempotent and a no-op on a child that has
+ *      already exited.
+ *
+ *   2. `process.stdin.resume()` on a TTY auto-reffs the stdin file
+ *      descriptor; `pause()` STOPS reading but does NOT unref. With the
+ *      fd still ref'd, the loop stays alive forever even after the
+ *      promise has resolved. `process.stdin.unref()` is the documented
+ *      way out (see Node.js docs, "Process I/O").
+ *
+ * Both fixes ship behind narrow try/catch blocks: on a stdin that's
+ * already been destroyed, both `setRawMode` and `unref` can throw, and
+ * since the child is already gone we'd rather move on than crash a
+ * recovery script.
+ *
+ * Exported for the smoke test in `tests/pty-cleanup.test.ts` which spawns
+ * a child Node, calls this directly with a fast-completing argv (e.g.
+ * `["--version"]`), and asserts that the child terminates within a
+ * bounded wall-clock window — the only deterministic regression test
+ * possible for "did the event loop drain?".
  */
-async function spawnNpmViaPty(
+export async function spawnNpmViaPty(
   args: readonly string[],
 ): Promise<{ exitCode: number | null }> {
   const { spawn: ptySpawn } = await import("node-pty");
@@ -392,9 +422,28 @@ async function spawnNpmViaPty(
           // Restoring raw-mode on a stdin that's already been closed
           // throws; safe to ignore at this point.
         }
+        try {
+          // Release the auto-ref that `process.stdin.resume()` placed on
+          // the TTY fd. Without this the parent Node process keeps the
+          // event loop alive forever after the PTY has exited — the
+          // exact symptom reported as "trust-configure prints `done` and
+          // then never returns".
+          process.stdin.unref();
+        } catch {
+          // ignore — fd may already be gone
+        }
       }
       process.stdout.off("resize", onResize);
       process.off("SIGINT", onSigint);
+      try {
+        // Idempotent on a child that's already exited; on Windows it
+        // additionally tells node-pty to tear down the ConPTY agent
+        // process and release its libuv handles, which is the second
+        // half of why the parent was hanging.
+        pty.kill();
+      } catch {
+        // ignore
+      }
       resolve({ exitCode: typeof exitCode === "number" ? exitCode : null });
     });
   });
