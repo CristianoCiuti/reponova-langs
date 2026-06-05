@@ -10,7 +10,7 @@
   "packageManager": "pnpm@9.15.9",
   "scripts": {
     "build": "pnpm -r --filter \"./packages/*\" build",
-    "test": "pnpm -r --filter \"./packages/*\" test",
+    "test": "pnpm -r --filter \"./packages/*\" --filter \"./tools/bootstrap-plugin\" test",
     "typecheck": "pnpm -r --filter \"./packages/*\" typecheck",
     "lint": "eslint packages tools",
     "lint:fix": "eslint packages tools --fix",

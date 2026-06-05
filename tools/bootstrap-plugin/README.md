@@ -1,71 +1,89 @@
 # `@reponova/bootstrap-plugin`
 
-One-shot helper that bootstraps a brand-new `@reponova/lang-*` package on npm. Combines the two manual steps that the chicken-and-egg of npm Trusted Publisher requires for a first publish:
+End-to-end helper that mirrors what the Release workflow's publish matrix does for an already-bootstrapped plugin, but from a maintainer's machine. Used:
 
-1. `npm publish --access public` from the package directory
-2. `pnpm trust:configure --apply` from the monorepo root
+1. The very first time a new `@reponova/lang-*` is published — npm has a chicken-and-egg constraint between OIDC Trusted Publisher and the first publish that no CI workflow can solve on its own.
+2. As the safe recovery tool when one job of the publish matrix fails (network flake, npm outage, etc.) — every step short-circuits when its effect is already in place, so re-running the script after a partial success is always safe.
 
-After this runs once for a new plugin, every subsequent release is fully automated via the Release workflow + OIDC, with no manual step.
+The script performs four idempotent steps:
+
+| # | Step | What it does |
+|---|---|---|
+| 1 | `npm publish --access public` | From `packages/<package-dir>`. Skipped if `<name>@<version>` is already on the registry. |
+| 2 | `pnpm trust:configure --apply` | From the monorepo root. Configures Trusted Publishers for all `@reponova/lang-*`. Idempotent on already-configured ones. |
+| 3 | `git tag <name>@<version>` + `git push origin refs/tags/<tag>` | From the monorepo root. Skipped if the tag already exists locally or on `origin`. |
+| 4 | `gh release create <tag> --notes-file <chunk from CHANGELOG.md>` | From the monorepo root. Notes are extracted via [`.github/scripts/extract-changelog.mjs`](../../.github/scripts/extract-changelog.mjs) — the same script the Release workflow uses. Skipped if the GH Release already exists. |
+
+After step 4 finishes for a brand-new package, a click on **Re-run failed jobs** in the failing GitHub Actions run flips the matrix to all-green: each step detects the work as already done and exits 0.
 
 ## When to use it
 
-You merged a PR that adds `packages/lang-<id>/` to the monorepo. Changesets opened the Version PR (`0.0.0 → 0.1.0`). You merged the Version PR, and the Release workflow tried to publish via OIDC and **failed** because the Trusted Publisher entry doesn't exist yet on npmjs.com.
+### A: Brand-new plugin
 
-Now run:
+You merged the PR that introduces `packages/lang-<id>/`. Changesets opened a Version PR (`0.0.0 → 0.1.0`). You merged the Version PR. The Release workflow ran and the matrix job for the new plugin failed (OIDC publish refused: no Trusted Publisher).
 
 ```bash
+git checkout main && git pull
 pnpm bootstrap-plugin lang-<id>
+# then: GitHub Actions UI → Re-run failed jobs
 ```
 
-The script will:
+### B: Recovery after any other isolated matrix failure
 
-1. Validate `packages/lang-<id>/package.json` (name in `@reponova/lang-*`, not `private`, has `version`)
-2. Check npm CLI version (>= 11.10.0) and authentication (`npm whoami`)
-3. Check whether `@reponova/lang-<id>@<version>` is already on npm; skip publish if yes
-4. Prompt for confirmation (skip with `--yes`)
-5. Run `npm publish --access public` from the package directory
-6. Run `pnpm trust:configure --apply` from the monorepo root, configuring Trusted Publisher for **all** `@reponova/lang-*` packages (idempotent on existing ones, configures the new one)
+Same procedure. The script's idempotence means it can re-publish if needed, or skip the publish and only fix what's missing (tag, release, etc.).
 
-When the npm UI prompts for 2FA, accept _"skip 2FA for the next 5 minutes"_ so step 6 doesn't ask again.
+### C: Avoid the red CI run entirely
+
+If you'd rather have an all-green CI run on the very first publish, run bootstrap on the `changeset-release/main` branch *before* merging the Version PR:
+
+```bash
+git fetch origin
+git checkout changeset-release/main
+pnpm install
+pnpm bootstrap-plugin lang-<id>
+git checkout main
+gh pr merge <version-pr-number> --squash
+```
+
+This is purely an aesthetic preference; the end state is identical to A.
 
 ## Options
 
 | Flag | Effect |
 |---|---|
-| `-y`, `--yes` | Skip the confirmation prompt before `npm publish` |
-| `--skip-publish` | Don't run `npm publish` (e.g. if you already published manually). Still runs the trust step. |
-| `--skip-trust` | Don't run `pnpm trust:configure`. Rare. |
+| `-y`, `--yes` | Skip confirmation prompts |
+| `--skip-publish` | Don't run `npm publish` |
+| `--skip-trust` | Don't run `pnpm trust:configure` |
+| `--skip-tag` | Don't create / push the git tag |
+| `--skip-release` | Don't create the GitHub Release |
 | `-h`, `--help` | Show usage |
+
+Combine `--skip-*` flags freely when you want to redo a specific step in isolation (rare).
 
 ## Prerequisites
 
-- npm CLI **>= 11.10.0** (for the `npm trust` subcommand). Check with `npm --version`. If older: `npm install -g npm@latest`
-- Logged in to npm: `npm login`
-- The package's source is built locally (the `prepublishOnly` hook should run `pnpm build`, which is the case for plugins generated by `pnpm scaffold`)
+- npm CLI **>= 11.10.0** (for the `npm trust` subcommand). Check with `npm --version`. If older: `npm install -g npm@latest`.
+- Logged in to npm: `npm login`.
+- GitHub CLI (`gh`) installed and authenticated: `gh auth login`.
+- The package's source builds locally (the `prepublishOnly` hook should run `pnpm build`, which is the case for plugins generated by `pnpm scaffold`).
 
-## End-to-end example
-
-```bash
-# (1) PR adds packages/lang-typescript/ → mergiata
-# (2) Changesets Version PR opens: 0.0.0 → 0.1.0 → mergiata
-# (3) Release workflow runs, OIDC publish fails because no Trusted Publisher
-
-# (4) From maintainer machine:
-cd ~/git-personal/reponova-langs
-git pull
-npm login                              # if not logged in
-pnpm bootstrap-plugin lang-typescript  # ~90s, accept OTP + skip-2FA prompts
-
-# (5) From the next version bump (0.1.1) onward, CI publishes alone via OIDC.
-```
+When the npm UI prompts for 2FA on the first publish, accept _"skip 2FA for the next 5 minutes"_ so step 2 (trust) doesn't ask again.
 
 ## Manual fallback
 
-If the script fails for some reason, you can do the same two operations by hand:
+If the script fails for some reason, the same operations done by hand are:
 
 ```bash
 cd packages/lang-<id>
 npm publish --access public
 cd ../..
 pnpm trust:configure --apply
+
+TAG="@reponova/lang-<id>@<version>"
+git tag "$TAG"
+git push origin "refs/tags/$TAG"
+
+NOTES=$(node .github/scripts/extract-changelog.mjs \
+  "packages/lang-<id>/CHANGELOG.md" "<version>")
+gh release create "$TAG" --title "$TAG" --notes "$NOTES"
 ```

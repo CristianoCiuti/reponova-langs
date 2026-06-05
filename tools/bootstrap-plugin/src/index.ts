@@ -1,17 +1,26 @@
 /**
- * Bootstrap a brand-new @reponova/lang-* package on npm with OIDC Trusted
- * Publisher in a single guided flow:
+ * Bootstrap a brand-new @reponova/lang-* package end-to-end in a single guided
+ * flow that mirrors what the Release workflow's publish matrix does for an
+ * already-bootstrapped plugin:
  *
- *   1. npm publish --access public  (cwd: packages/<package-dir>)
- *   2. pnpm trust:configure --apply (cwd: monorepo root)
+ *   1. npm publish --access public          (cwd: packages/<package-dir>)
+ *   2. pnpm trust:configure --apply         (cwd: monorepo root)
+ *   3. git tag <name>@<version> + push      (cwd: monorepo root)
+ *   4. gh release create with CHANGELOG     (cwd: monorepo root)
  *
- * From the second version onward the GitHub Actions release workflow can
- * publish via OIDC alone, with no further manual step.
+ * Every step is idempotent: rerunning the script after a partial success
+ * skips whatever is already in place, so this is also the safe recovery
+ * tool when one job of the publish matrix fails (for any reason — first
+ * publish, network flake, etc.) and you want to converge the state by hand
+ * before clicking "Re-run failed jobs" in Actions.
  *
  * Usage:
- *   pnpm bootstrap-plugin lang-typescript           # interactive
- *   pnpm bootstrap-plugin lang-typescript --yes     # skip confirmation prompt
- *   pnpm bootstrap-plugin lang-typescript --skip-publish   # only configure trust
+ *   pnpm bootstrap-plugin lang-typescript                # full flow, interactive
+ *   pnpm bootstrap-plugin lang-typescript --yes          # skip confirmations
+ *   pnpm bootstrap-plugin lang-typescript --skip-publish # only configure trust + tag + release
+ *   pnpm bootstrap-plugin lang-typescript --skip-trust   # skip the trust step
+ *   pnpm bootstrap-plugin lang-typescript --skip-tag     # skip git tag
+ *   pnpm bootstrap-plugin lang-typescript --skip-release # skip GH Release
  */
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -30,6 +39,8 @@ interface CliOptions {
   readonly packageDir: string;
   readonly skipPublish: boolean;
   readonly skipTrust: boolean;
+  readonly skipTag: boolean;
+  readonly skipRelease: boolean;
   readonly yes: boolean;
 }
 
@@ -37,6 +48,8 @@ function parseArgs(argv: readonly string[]): CliOptions {
   let packageDir: string | undefined;
   let skipPublish = false;
   let skipTrust = false;
+  let skipTag = false;
+  let skipRelease = false;
   let yes = false;
 
   for (const arg of argv) {
@@ -45,6 +58,10 @@ function parseArgs(argv: readonly string[]): CliOptions {
       skipPublish = true;
     } else if (arg === "--skip-trust") {
       skipTrust = true;
+    } else if (arg === "--skip-tag") {
+      skipTag = true;
+    } else if (arg === "--skip-release") {
+      skipRelease = true;
     } else if (arg === "--yes" || arg === "-y") {
       yes = true;
     } else if (arg === "--help" || arg === "-h") {
@@ -69,15 +86,15 @@ function parseArgs(argv: readonly string[]): CliOptions {
     process.exit(2);
   }
 
-  return { packageDir, skipPublish, skipTrust, yes };
+  return { packageDir, skipPublish, skipTrust, skipTag, skipRelease, yes };
 }
 
 function printHelp(): void {
   console.log(`Usage: bootstrap-plugin <package-dir> [options]
 
-Bootstraps a brand-new @reponova/lang-* package on npm with OIDC Trusted
-Publisher. Run this once per new plugin. From the next version bump onward,
-the Release workflow publishes automatically via OIDC.
+Bootstraps a brand-new @reponova/lang-* package end-to-end (npm publish +
+trust + git tag + GitHub Release). Every step is idempotent so the script
+is also the safe recovery tool when a publish-matrix job fails in CI.
 
 Arguments:
   <package-dir>      Directory name under packages/ (e.g. lang-typescript).
@@ -85,15 +102,18 @@ Arguments:
                      and must NOT be private.
 
 Options:
-  -y, --yes          Skip the confirmation prompt before publishing.
-  --skip-publish     Don't run npm publish (e.g. if it already succeeded).
-  --skip-trust       Don't run pnpm trust:configure (rare).
+  -y, --yes          Skip confirmation prompts.
+  --skip-publish     Don't run npm publish.
+  --skip-trust       Don't run pnpm trust:configure.
+  --skip-tag         Don't create / push the git tag.
+  --skip-release     Don't create the GitHub Release.
   -h, --help         Show this help.
 
 Prerequisites:
   - npm CLI >= 11.10.0 (required by the trust subcommand)
   - You are logged in to npm: \`npm login\`
-  - When 2FA is requested on the first prompt, accept "skip 2FA for the
+  - GitHub CLI (\`gh\`) installed and authenticated: \`gh auth login\`
+  - When 2FA is requested on the first npm prompt, accept "skip 2FA for the
     next 5 minutes" so the trust step doesn't ask again.`);
 }
 
@@ -141,6 +161,19 @@ function checkNpmAuth(): { ok: boolean; user: string } {
   return { ok: true, user: r.stdout.trim() };
 }
 
+function checkGhInstalled(): boolean {
+  const r = spawnSync("gh", ["--version"], { encoding: "utf8", shell: true });
+  return r.status === 0;
+}
+
+function checkGhAuth(): boolean {
+  const r = spawnSync("gh", ["auth", "status"], {
+    encoding: "utf8",
+    shell: true,
+  });
+  return r.status === 0;
+}
+
 function checkAlreadyPublished(name: string, version: string): "yes" | "no" | "unknown" {
   const r = spawnSync("npm", ["view", `${name}@${version}`, "version"], {
     encoding: "utf8",
@@ -150,6 +183,55 @@ function checkAlreadyPublished(name: string, version: string): "yes" | "no" | "u
   const stderr = r.stderr ?? "";
   if (stderr.includes("E404") || stderr.includes("404 Not Found")) return "no";
   return "unknown";
+}
+
+/** Returns true iff `refs/tags/<tag>` exists locally. */
+function gitTagExistsLocal(tag: string, cwd: string): boolean {
+  const r = spawnSync("git", ["rev-parse", "-q", "--verify", `refs/tags/${tag}`], {
+    cwd,
+    encoding: "utf8",
+    shell: true,
+  });
+  return r.status === 0;
+}
+
+/** Returns true iff `refs/tags/<tag>` exists on the `origin` remote. */
+function gitTagExistsRemote(tag: string, cwd: string): boolean {
+  const r = spawnSync(
+    "git",
+    ["ls-remote", "--exit-code", "--tags", "origin", `refs/tags/${tag}`],
+    { cwd, encoding: "utf8", shell: true },
+  );
+  return r.status === 0;
+}
+
+/** Returns true iff a GH Release with the given tag already exists. */
+function ghReleaseExists(tag: string, cwd: string): boolean {
+  const r = spawnSync("gh", ["release", "view", tag], {
+    cwd,
+    encoding: "utf8",
+    shell: true,
+  });
+  return r.status === 0;
+}
+
+/**
+ * Run the shared CHANGELOG section extractor and return its stdout, or
+ * `null` if the section is not found / cannot be read.
+ */
+function extractChangelog(
+  changelogPath: string,
+  version: string,
+  cwd: string,
+): string | null {
+  const script = resolve(cwd, ".github", "scripts", "extract-changelog.mjs");
+  const r = spawnSync("node", [script, changelogPath, version], {
+    cwd,
+    encoding: "utf8",
+    shell: true,
+  });
+  if (r.status === 0) return r.stdout;
+  return null;
 }
 
 async function confirmPrompt(message: string, defaultYes: boolean): Promise<boolean> {
@@ -189,12 +271,16 @@ async function main(): Promise<void> {
     );
   }
 
-  console.log(`[bootstrap-plugin] package: ${pj.name}@${pj.version}`);
+  const tag = `${pj.name}@${pj.version}`;
+  console.log(`[bootstrap-plugin] package: ${tag}`);
   console.log("");
 
   const willPublish = !opts.skipPublish;
   const willTrust = !opts.skipTrust;
+  const willTag = !opts.skipTag;
+  const willRelease = !opts.skipRelease;
 
+  // ---- Prereq checks --------------------------------------------------------
   if (willPublish || willTrust) {
     const v = checkNpmVersion();
     if (!v.ok) {
@@ -210,24 +296,42 @@ async function main(): Promise<void> {
     }
     console.log(`[bootstrap-plugin] npm version: ${v.version}`);
     console.log(`[bootstrap-plugin] npm user:    ${auth.user}`);
-    console.log("");
   }
 
+  if (willRelease) {
+    if (!checkGhInstalled()) {
+      console.error(
+        `[bootstrap-plugin] GitHub CLI (\`gh\`) is not installed. install from https://cli.github.com or rerun with --skip-release.`,
+      );
+      process.exit(1);
+    }
+    if (!checkGhAuth()) {
+      console.error(
+        `[bootstrap-plugin] \`gh\` is installed but not authenticated. run: gh auth login`,
+      );
+      process.exit(1);
+    }
+    console.log(`[bootstrap-plugin] gh:          authenticated`);
+  }
+
+  if (willPublish || willTrust || willRelease) console.log("");
+
+  // ---- Step 1: npm publish --------------------------------------------------
   if (willPublish) {
     const status = checkAlreadyPublished(pj.name, pj.version);
     if (status === "yes") {
       console.log(
-        `[bootstrap-plugin] ${pj.name}@${pj.version} is already published — skipping publish step`,
+        `[bootstrap-plugin] ${tag} is already on the npm registry — skipping publish`,
       );
     } else {
       if (status === "unknown") {
         console.log(
-          `[bootstrap-plugin] could not check npm registry for ${pj.name}@${pj.version}; will attempt publish anyway`,
+          `[bootstrap-plugin] could not check npm registry for ${tag}; will attempt publish anyway`,
         );
       }
       if (!opts.yes) {
         const ok = await confirmPrompt(
-          `[bootstrap-plugin] About to run \`npm publish --access public\` for ${pj.name}@${pj.version}. Continue?`,
+          `[bootstrap-plugin] About to run \`npm publish --access public\` for ${tag}. Continue?`,
           true,
         );
         if (!ok) {
@@ -247,11 +351,12 @@ async function main(): Promise<void> {
         console.error(`[bootstrap-plugin] npm publish failed (exit ${r.status})`);
         process.exit(1);
       }
-      console.log(`[bootstrap-plugin] published ${pj.name}@${pj.version}`);
+      console.log(`[bootstrap-plugin] published ${tag}`);
     }
     console.log("");
   }
 
+  // ---- Step 2: trust:configure ---------------------------------------------
   if (willTrust) {
     console.log(`[bootstrap-plugin] $ pnpm trust:configure --apply  (cwd: ${root})`);
     const r = spawnSync("pnpm", ["trust:configure", "--apply"], {
@@ -262,6 +367,76 @@ async function main(): Promise<void> {
     if (r.status !== 0) {
       console.error(`[bootstrap-plugin] trust:configure failed (exit ${r.status})`);
       process.exit(1);
+    }
+    console.log("");
+  }
+
+  // ---- Step 3: git tag ------------------------------------------------------
+  if (willTag) {
+    if (gitTagExistsLocal(tag, root)) {
+      console.log(`[bootstrap-plugin] tag ${tag} already exists locally — skipping`);
+    } else if (gitTagExistsRemote(tag, root)) {
+      console.log(`[bootstrap-plugin] tag ${tag} already exists on origin — skipping`);
+    } else {
+      console.log(`[bootstrap-plugin] $ git tag ${tag}`);
+      const tagResult = spawnSync("git", ["tag", tag], {
+        cwd: root,
+        stdio: "inherit",
+        shell: true,
+      });
+      if (tagResult.status !== 0) {
+        console.error(`[bootstrap-plugin] git tag failed (exit ${tagResult.status})`);
+        process.exit(1);
+      }
+      console.log(`[bootstrap-plugin] $ git push origin refs/tags/${tag}`);
+      const pushResult = spawnSync(
+        "git",
+        ["push", "origin", `refs/tags/${tag}`],
+        { cwd: root, stdio: "inherit", shell: true },
+      );
+      if (pushResult.status !== 0) {
+        console.error(
+          `[bootstrap-plugin] git push tag failed (exit ${pushResult.status})`,
+        );
+        process.exit(1);
+      }
+    }
+    console.log("");
+  }
+
+  // ---- Step 4: GitHub Release ----------------------------------------------
+  if (willRelease) {
+    if (ghReleaseExists(tag, root)) {
+      console.log(`[bootstrap-plugin] GH Release ${tag} already exists — skipping`);
+    } else {
+      const changelogPath = `packages/${opts.packageDir}/CHANGELOG.md`;
+      const notes = extractChangelog(changelogPath, pj.version, root);
+      if (notes === null) {
+        console.log(
+          `[bootstrap-plugin] CHANGELOG section for ${pj.version} not found in ${changelogPath} — using --generate-notes`,
+        );
+        console.log(`[bootstrap-plugin] $ gh release create ${tag} --title ${tag} --generate-notes`);
+        const r = spawnSync(
+          "gh",
+          ["release", "create", tag, "--title", tag, "--generate-notes"],
+          { cwd: root, stdio: "inherit", shell: true },
+        );
+        if (r.status !== 0) {
+          console.error(`[bootstrap-plugin] gh release create failed (exit ${r.status})`);
+          process.exit(1);
+        }
+      } else {
+        console.log(`[bootstrap-plugin] $ gh release create ${tag} --title ${tag} --notes "<chunk from ${changelogPath}>"`);
+        const r = spawnSync(
+          "gh",
+          ["release", "create", tag, "--title", tag, "--notes", notes],
+          { cwd: root, stdio: "inherit", shell: true },
+        );
+        if (r.status !== 0) {
+          console.error(`[bootstrap-plugin] gh release create failed (exit ${r.status})`);
+          process.exit(1);
+        }
+      }
     }
     console.log("");
   }
