@@ -80,9 +80,17 @@ git commit / push / open PR / merge PR
 
 For an already-bootstrapped package, this is everything: every job is green, npm and GitHub Releases stay in lock-step, no manual step required.
 
+### How retries work in the publish matrix
+
+Network-bound steps that are read-only or post-publish writes (`npm view`, `git ls-remote`, `git push origin <tag>`, `gh release view`, `gh release create`) are wrapped in `.github/scripts/retry.sh`, a small bash helper with exponential backoff. The helper retries up to 5 times (waits 2s → 4s → 8s → 16s, ~30s worst-case extra wall-time) and propagates the final exit code on failure. Each retry is annotated as a `::warning::` in the run summary; an exhausted retry surfaces a `::error::`.
+
+`npm publish` itself is intentionally **not** retried: its most common failures (`404 PUT Not Found` for "no Trusted Publisher", `409 Conflict` for an already-published version) are deterministic and a retry would mask real issues while doubling CI time. For the rare transient `npm publish` failure, the recovery is the bootstrap-plugin path (idempotent on re-run).
+
+The retry helper is unit-tested end-to-end in `tools/bootstrap-plugin/tests/retry.test.ts` (success first try, success after N flakes, exhaustion + exit-code propagation, `MAX_ATTEMPTS=1` behaves as a single shot, etc.).
+
 ### When a publish-matrix job fails (one-time per new plugin, or rare flakes)
 
-The very first time a new `@reponova/lang-*` is bumped past `0.0.0`, its publish job will fail because npm cannot accept an OIDC publish without a pre-existing Trusted Publisher entry. The same recovery procedure applies to any other isolated job failure (network flake, npm outage, etc.):
+Even with retries, a job can still end red — most commonly the first time a new `@reponova/lang-*` is bumped past `0.0.0`, where npm cannot accept an OIDC publish without a pre-existing Trusted Publisher entry. The same recovery procedure applies to any other isolated job failure (extended network outage, GitHub API extended degradation, etc.):
 
 ```bash
 git checkout main
