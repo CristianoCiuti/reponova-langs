@@ -1,0 +1,72 @@
+{
+  "name": "@reponova/lang-javascript",
+  "version": "0.1.0",
+  "description": "JavaScript language support for RepoNova (.js, .mjs, .cjs, .jsx via tree-sitter-javascript)",
+  "keywords": [
+    "reponova",
+    "reponova-plugin",
+    "language-plugin",
+    "javascript",
+    "js",
+    "jsx",
+    "esm",
+    "commonjs",
+    "react",
+    "tree-sitter",
+    "tree-sitter-javascript",
+    "ast",
+    "code-analysis",
+    "knowledge-graph",
+    "static-analysis",
+    "outline",
+    "symbol-extraction"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "grammars",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "prebuild": "pnpm -w grammar-fetch --package=lang-javascript",
+    "build": "tsup",
+    "pretest": "pnpm -w grammar-fetch --package=lang-javascript",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "peerDependencies": {
+    "reponova": "^0.4.0"
+  },
+  "devDependencies": {
+    "@reponova/lang-test-utils": "workspace:*",
+    "@reponova/lang-typescript-core": "workspace:*",
+    "reponova": "^0.4.3",
+    "web-tree-sitter": "^0.25.10"
+  },
+  "reponova": {
+    "type": "language",
+    "id": "javascript",
+    "extensions": [
+      ".js",
+      ".mjs",
+      ".cjs",
+      ".jsx"
+    ],
+    "grammar": "./grammars/tree-sitter-javascript.wasm"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CristianoCiuti/reponova-langs.git",
+    "directory": "packages/lang-javascript"
+  },
+  "homepage": "https://github.com/CristianoCiuti/reponova-langs/tree/main/packages/lang-javascript"
+}

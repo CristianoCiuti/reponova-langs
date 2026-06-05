@@ -286,10 +286,16 @@ export class TypescriptExtractor implements LanguageExtractor {
 
       case "function_declaration":
       case "function_signature":
+      case "generator_function_declaration":
         // function_signature covers `.d.ts` ambient declarations and
-        // function overload signatures. We extract them so the graph
-        // sees the symbol; same-name duplicates are deduped at the
-        // tail of `extract()`.
+        // function overload signatures.
+        // generator_function_declaration is what tree-sitter-javascript
+        // emits for `function* gen()` (tree-sitter-typescript folds
+        // generators into function_declaration with a `*` token, so the
+        // case is JS-specific but the extraction is identical — the
+        // `generator` modifier is added downstream by
+        // augmentDecoratorsWithModifiers from the node type itself).
+        // Same-name duplicates are deduped at the tail of `extract()`.
         this.extractFunction(node, symbols, references, moduleName, undefined, decorators, jsDoc, isExported);
         return;
 
@@ -317,8 +323,86 @@ export class TypescriptExtractor implements LanguageExtractor {
 
       case "lexical_declaration":
       case "variable_declaration":
+        // CommonJS-style imports (`var x = require('mod')`,
+        // `const { y } = require('mod')`) surface here as a normal
+        // declaration; pre-scan for require() calls to seed the
+        // imports list, then fall through to the regular declaration
+        // extraction. ESM `import` / `export` statements have their
+        // own dedicated cases above, so this only matches pure CJS.
+        this.extractRequireImports(node, imports);
         this.extractTopLevelDeclarations(node, symbols, references, moduleName, jsDoc, isExported);
         return;
+    }
+  }
+
+  /**
+   * CommonJS `require()` recogniser. Captures the three idiomatic patterns:
+   *
+   *   var fs = require('node:fs');
+   *   const { resolve, join } = require('node:path');
+   *   const path = require('node:path');
+   *
+   * Surfaces them as `ImportDeclaration` entries indistinguishable from
+   * an ESM `import` of the same module, so a graph that mixes ESM and CJS
+   * (or a CJS-only module like Express's `lib/`) yields homogeneous
+   * `imports` lists.
+   *
+   * Bare `require('x')` as a side-effect statement (no binding) lives
+   * inside an `expression_statement`, not a declaration, so this helper
+   * does not see it. That's a deliberate scope limit: side-effect-only
+   * requires are rare in real code and adding them would require a
+   * second pass over `expression_statement` nodes at every call site.
+   */
+  private extractRequireImports(
+    declarationNode: SyntaxNode,
+    imports: ImportDeclaration[],
+  ): void {
+    for (const declarator of declarationNode.namedChildren) {
+      if (declarator.type !== "variable_declarator") continue;
+      const value = declarator.childForFieldName("value");
+      if (!value || value.type !== "call_expression") continue;
+      const fn = value.childForFieldName("function");
+      if (!fn || fn.type !== "identifier" || fn.text !== "require") continue;
+      const args = value.childForFieldName("arguments");
+      if (!args) continue;
+      const stringArg = args.namedChildren.find((c) => c.type === "string");
+      if (!stringArg) continue;
+      const module = this.unquoteString(stringArg.text);
+
+      const names: string[] = [];
+      const binding = declarator.childForFieldName("name");
+      if (binding) {
+        if (binding.type === "identifier") {
+          // `var fs = require('node:fs')` — the binding name IS the
+          // alias. We surface it the same way an ESM default import
+          // would (`import fs from 'node:fs'`).
+          names.push(binding.text);
+        } else if (binding.type === "object_pattern") {
+          // `const { resolve, join } = require('node:path')` — each
+          // destructured key surfaces as a named import.
+          for (const prop of binding.namedChildren) {
+            if (prop.type === "shorthand_property_identifier_pattern") {
+              names.push(prop.text);
+            } else if (prop.type === "pair_pattern") {
+              const keyNode = prop.childForFieldName("key");
+              if (keyNode) names.push(keyNode.text);
+            } else if (prop.type === "object_assignment_pattern") {
+              // `const { x = 1 } = require(…)` — captured as `x`.
+              const left = prop.childForFieldName("left");
+              if (left && left.type === "shorthand_property_identifier_pattern") {
+                names.push(left.text);
+              }
+            }
+          }
+        }
+      }
+
+      imports.push({
+        module,
+        names,
+        isWildcard: false,
+        line: declarationNode.startPosition.row + 1,
+      });
     }
   }
 
@@ -505,6 +589,17 @@ export class TypescriptExtractor implements LanguageExtractor {
    */
   private augmentDecoratorsWithModifiers(node: SyntaxNode, decorators: string[]): string[] {
     const modifiers: string[] = [];
+    // Tree-sitter-javascript emits `generator_function_declaration` /
+    // `generator_function` as distinct node kinds (not function_declaration
+    // + a `*` token), so the `*`-token sweep below would miss them.
+    // Surface the `generator` modifier from the node type itself so JS
+    // and TS produce equivalent decorator lists.
+    if (
+      node.type === "generator_function_declaration" ||
+      node.type === "generator_function"
+    ) {
+      modifiers.push("generator");
+    }
     for (const child of node.children) {
       switch (child.type) {
         case "async":
@@ -613,7 +708,17 @@ export class TypescriptExtractor implements LanguageExtractor {
         pendingJsDoc = undefined;
         continue;
       }
-      if (member.type === "public_field_definition") {
+      if (
+        member.type === "public_field_definition" ||
+        member.type === "field_definition"
+      ) {
+        // `public_field_definition` is the tree-sitter-typescript node
+        // (carries accessibility / readonly / static modifiers).
+        // `field_definition` is the tree-sitter-javascript equivalent
+        // (no accessibility modifiers, but `static` and decorators are
+        // preserved). Both shapes share the `name` field and ship
+        // `static` as a child token, so extractClassField handles both
+        // uniformly.
         this.extractClassField(member, symbols, moduleName, className, pendingDecorators, pendingJsDoc);
         pendingDecorators = [];
         pendingJsDoc = undefined;
@@ -659,7 +764,16 @@ export class TypescriptExtractor implements LanguageExtractor {
     decorators: string[],
     docstring: string | undefined,
   ): void {
-    const nameNode = node.childForFieldName("name");
+    // Tree-sitter-typescript exposes the field's identifier under
+    // `name`; tree-sitter-javascript exposes it under `property` (rule
+    // `field_definition`). Try both and fall back to the first
+    // property_identifier child for grammars that don't tag the field.
+    const nameNode =
+      node.childForFieldName("name")
+      ?? node.childForFieldName("property")
+      ?? node.namedChildren.find(
+        (c) => c.type === "property_identifier" || c.type === "identifier",
+      );
     if (!nameNode) return;
     const name = nameNode.text;
     if (!name) return;
@@ -685,25 +799,51 @@ export class TypescriptExtractor implements LanguageExtractor {
 
   /**
    * Heritage clauses produce both `extends` and `implements` references.
+   *
+   * Two grammar shapes are accepted:
+   *
+   *   tree-sitter-typescript:
+   *     class_heritage
+   *       extends_clause
+   *         identifier "Component"
+   *       implements_clause
+   *         type_identifier "Disposable"
+   *
+   *   tree-sitter-javascript:
+   *     class_heritage          // children = ['extends', expr]
+   *       identifier "Component"
+   *
+   * The TS shape wraps each clause in a typed container; the JS shape
+   * skips that wrapper and exposes the heritage expression directly as
+   * a named child of `class_heritage`. We accept both so the same logic
+   * drives lang-typescript / lang-tsx (TS shape) and lang-javascript
+   * (JS shape).
    */
   private extractHeritage(node: SyntaxNode): string[] {
     const bases: string[] = [];
     const heritage = node.namedChildren.find((c) => c.type === "class_heritage");
     if (!heritage) return bases;
     for (const clause of heritage.namedChildren) {
-      if (clause.type !== "extends_clause" && clause.type !== "implements_clause") continue;
-      for (const value of clause.namedChildren) {
-        if (
-          value.type === "identifier"
-          || value.type === "type_identifier"
-          || value.type === "member_expression"
-          || value.type === "generic_type"
-        ) {
-          bases.push(this.bareTypeName(value));
+      if (clause.type === "extends_clause" || clause.type === "implements_clause") {
+        for (const value of clause.namedChildren) {
+          if (this.isHeritageBase(value)) {
+            bases.push(this.bareTypeName(value));
+          }
         }
+      } else if (this.isHeritageBase(clause)) {
+        bases.push(this.bareTypeName(clause));
       }
     }
     return bases;
+  }
+
+  private isHeritageBase(n: SyntaxNode): boolean {
+    return (
+      n.type === "identifier" ||
+      n.type === "type_identifier" ||
+      n.type === "member_expression" ||
+      n.type === "generic_type"
+    );
   }
 
   // ─── Interface / type / enum / namespace ────────────────────────────────
@@ -1027,6 +1167,14 @@ export class TypescriptExtractor implements LanguageExtractor {
       if (n.type === "call_expression") {
         const funcNode = n.childForFieldName("function");
         if (funcNode) record(funcNode.text);
+      } else if (n.type === "new_expression") {
+        // `new EventEmitter()`, `new HttpError(404)`, … are recorded
+        // as calls to the constructor name, mirroring how a
+        // call_expression to a factory function would surface. The
+        // constructor field holds the identifier / member expression
+        // we want; the `arguments` field is irrelevant here.
+        const ctorNode = n.childForFieldName("constructor");
+        if (ctorNode) record(ctorNode.text);
       } else if (
         n.type === "jsx_opening_element" ||
         n.type === "jsx_self_closing_element"
