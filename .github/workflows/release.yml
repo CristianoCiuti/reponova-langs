@@ -191,8 +191,18 @@ jobs:
       # by SHA-256) so each published tarball ships the pinned grammar.
       - run: pnpm grammar-fetch
 
-      - name: Build target package
-        run: pnpm --filter "${{ matrix.pkg.name }}" build
+      - name: Build all workspace packages
+        # We build the entire workspace (not just the target) because
+        # consumer plugins like `@reponova/lang-typescript` depend on
+        # workspace-internal packages such as `@reponova/lang-typescript-core`
+        # via `devDependencies` (they are bundled inline by `tsup
+        # --noExternal` + `dts: { resolve: true }`). pnpm's `...<pkg>`
+        # filter only follows `dependencies`, not `devDependencies`, so
+        # filtering would skip the internal core and tsup would fail with
+        # "Could not resolve '@reponova/lang-typescript-core'". Building
+        # everything is robust against future changes to the dep graph
+        # and adds only a few seconds per matrix job.
+        run: pnpm build
 
       # Network-bound idempotency reads (npm view, gh release view,
       # git ls-remote) and post-publish writes (git push tag, gh release
