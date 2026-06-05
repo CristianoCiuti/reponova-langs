@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { plugin, TypescriptExtractor } from "../src/index.js";
+import { TypescriptExtractor } from "../src/index.js";
 import { loadFixture, loadGrammar } from "@reponova/lang-test-utils";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,9 +7,13 @@ import type { SyntaxTree } from "reponova";
 
 // tests/ → package root
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const grammarPath = resolve(
+  packageRoot,
+  "../lang-typescript/grammars/tree-sitter-typescript.wasm",
+);
 
 async function parse(source: string): Promise<SyntaxTree> {
-  const loaded = await loadGrammar(plugin.grammarPath!);
+  const loaded = await loadGrammar(grammarPath);
   if (!loaded) throw new Error("grammar not available; run `pnpm grammar-fetch`");
   return loaded.parse(source) as SyntaxTree;
 }

@@ -43,6 +43,7 @@
   },
   "devDependencies": {
     "@reponova/lang-test-utils": "workspace:*",
+    "@reponova/lang-typescript-core": "workspace:*",
     "reponova": "^0.4.3",
     "web-tree-sitter": "^0.25.10"
   },

@@ -1,8 +1,8 @@
 /**
- * TypeScript language extractor.
+ * TypeScript-family language extractor (shared between lang-typescript and lang-tsx).
  *
- * Produces a FileExtraction for `.ts/.mts/.cts` source files using
- * `tree-sitter-typescript.wasm`. Coverage:
+ * Produces a FileExtraction for TypeScript-family source files using a
+ * `tree-sitter-typescript`-compatible WASM grammar. Coverage:
  *
  *   - Symbols: functions, classes, methods, interfaces, type aliases,
  *     enums, top-level constants (UPPER_SNAKE_CASE only)
@@ -12,10 +12,12 @@
  *   - Module-level docstring: leading JSDoc /** ... *\/ comment
  *   - Symbol docstring: JSDoc directly preceding the declaration
  *
- * `.tsx` (JSX) is intentionally NOT in the extension list for v0.1.0:
- * supporting it requires a second grammar (`tree-sitter-tsx.wasm`),
- * which the current `LanguagePlugin` contract does not allow per plugin.
- * See README "Limitations" for the planned v0.2.0 follow-up.
+ * The class is parameterised so the same logic drives both:
+ *   - `@reponova/lang-typescript` (`.ts/.mts/.cts` + `tree-sitter-typescript.wasm`)
+ *   - `@reponova/lang-tsx`        (`.tsx`            + `tree-sitter-tsx.wasm`)
+ *
+ * Defaults match the TypeScript flavor; consumers override via
+ * `TypescriptExtractorOptions` at construction time.
  */
 import type {
   LanguageExtractor,
@@ -52,23 +54,69 @@ function posixBasename(p: string): string {
   return lastSlash === -1 ? normalized : normalized.slice(lastSlash + 1);
 }
 
-const TS_EXTENSIONS = [".ts", ".mts", ".cts"] as const;
+/** Default extensions for the TypeScript flavor. */
+export const DEFAULT_TS_EXTENSIONS = [".ts", ".mts", ".cts"] as const;
 
-/** Candidate file extensions tried when resolving a relative import. */
-const RESOLVE_CANDIDATES = [".ts", ".mts", ".cts", ".d.ts"] as const;
+/** Default candidate file extensions tried when resolving a relative import (TS flavor). */
+export const DEFAULT_RESOLVE_CANDIDATES = [".ts", ".mts", ".cts", ".d.ts"] as const;
 
-/** Index file names tried when resolving a directory import. */
-const INDEX_CANDIDATES = [
+/** Default index file names tried when resolving a directory import (TS flavor). */
+export const DEFAULT_INDEX_CANDIDATES = [
   "index.ts",
   "index.mts",
   "index.cts",
   "index.d.ts",
 ] as const;
 
+/**
+ * Knobs for adapting the same extractor logic to TypeScript or TSX.
+ *
+ * All fields are optional; omitting a field reverts to the TypeScript-flavor
+ * default. The expected override shape for each consumer is:
+ *
+ *   - lang-typescript: pass `{}` (or omit entirely).
+ *   - lang-tsx: pass
+ *       {
+ *         languageId: "tsx",
+ *         extensions: [".tsx"],
+ *         wasmFile: "tree-sitter-tsx.wasm",
+ *         resolveCandidates: [".ts", ".tsx", ".mts", ".cts", ".d.ts"],
+ *         indexCandidates: ["index.tsx", "index.ts", "index.mts", "index.cts", "index.d.ts"],
+ *       }
+ */
+export interface TypescriptExtractorOptions {
+  /** Language id surfaced as `FileExtraction.language` and on the extractor instance. */
+  readonly languageId?: string;
+  /** Source-file extensions handled by this extractor instance. */
+  readonly extensions?: readonly string[];
+  /** WASM grammar filename, registered against `LanguageExtractor.wasmFile`. */
+  readonly wasmFile?: string;
+  /** Extensions tried (in order) when resolving a relative import. */
+  readonly resolveCandidates?: readonly string[];
+  /** Index file names tried (in order) when resolving a directory import. */
+  readonly indexCandidates?: readonly string[];
+}
+
 export class TypescriptExtractor implements LanguageExtractor {
-  readonly languageId = "typescript";
-  readonly extensions = [...TS_EXTENSIONS];
-  readonly wasmFile = "tree-sitter-typescript.wasm";
+  readonly languageId: string;
+  readonly extensions: string[];
+  readonly wasmFile: string;
+  private readonly resolveCandidates: readonly string[];
+  private readonly indexCandidates: readonly string[];
+
+  constructor(options: TypescriptExtractorOptions = {}) {
+    this.languageId = options.languageId ?? "typescript";
+    this.extensions = options.extensions
+      ? [...options.extensions]
+      : [...DEFAULT_TS_EXTENSIONS];
+    this.wasmFile = options.wasmFile ?? "tree-sitter-typescript.wasm";
+    this.resolveCandidates = options.resolveCandidates
+      ? [...options.resolveCandidates]
+      : [...DEFAULT_RESOLVE_CANDIDATES];
+    this.indexCandidates = options.indexCandidates
+      ? [...options.indexCandidates]
+      : [...DEFAULT_INDEX_CANDIDATES];
+  }
 
   extract(
     tree: SyntaxTree,
@@ -154,8 +202,8 @@ export class TypescriptExtractor implements LanguageExtractor {
     }
 
     const candidates: string[] = [];
-    for (const ext of RESOLVE_CANDIDATES) candidates.push(`${target}${ext}`);
-    for (const idx of INDEX_CANDIDATES) candidates.push(`${target}/${idx}`);
+    for (const ext of this.resolveCandidates) candidates.push(`${target}${ext}`);
+    for (const idx of this.indexCandidates) candidates.push(`${target}/${idx}`);
     return candidates;
   }
 
@@ -1013,13 +1061,13 @@ export class TypescriptExtractor implements LanguageExtractor {
   }
 
   private hasKnownExtension(p: string): boolean {
-    return RESOLVE_CANDIDATES.some((ext) => p.endsWith(ext));
+    return this.resolveCandidates.some((ext) => p.endsWith(ext));
   }
 
   private filePathToModuleName(filePath: string): string {
     const normalized = toPosix(filePath);
     let modulePath = normalized;
-    for (const ext of TS_EXTENSIONS) {
+    for (const ext of this.extensions) {
       if (modulePath.endsWith(ext)) {
         modulePath = modulePath.slice(0, -ext.length);
         break;
