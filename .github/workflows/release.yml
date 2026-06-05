@@ -194,7 +194,18 @@ jobs:
       - name: Build target package
         run: pnpm --filter "${{ matrix.pkg.name }}" build
 
-      - name: Publish to npm via OIDC (idempotent)
+      # Network-bound idempotency reads (npm view, gh release view,
+      # git ls-remote) and post-publish writes (git push tag, gh release
+      # create) are wrapped in `retry` to tolerate transient API flakes
+      # like the GitHub API 504 Gateway Timeout that took down a single
+      # publish-matrix job in run #27004533534.
+      #
+      # `npm publish` itself is intentionally NOT retried: its most
+      # common failure modes (404 "no Trusted Publisher", 409 version
+      # conflict) are deterministic; retrying would mask real issues
+      # and double CI time. Recovery for the rare transient publish
+      # failure is the bootstrap-plugin path (idempotent on re-run).
+      - name: Publish to npm via OIDC (idempotent + retry on read flakes)
         env:
           NPM_CONFIG_PROVENANCE: 'true'
           PKG_NAME: ${{ matrix.pkg.name }}
@@ -203,31 +214,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if npm view "$PKG_NAME@$PKG_VERSION" version >/dev/null 2>&1; then
+          source .github/scripts/retry.sh
+          if MAX_ATTEMPTS=3 retry -- npm view "$PKG_NAME@$PKG_VERSION" version >/dev/null 2>&1; then
             echo "$PKG_NAME@$PKG_VERSION already on registry — skipping publish"
             exit 0
           fi
           cd "packages/$PKG_DIR"
           npm publish --access public
 
-      - name: Create and push git tag (idempotent)
+      - name: Create and push git tag (idempotent + retry on transient failures)
         env:
           TAG: ${{ matrix.pkg.name }}@${{ matrix.pkg.version }}
         shell: bash
         run: |
           set -euo pipefail
+          source .github/scripts/retry.sh
           if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
             echo "Tag $TAG already exists locally — skipping"
             exit 0
           fi
-          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+          if MAX_ATTEMPTS=3 retry -- git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             echo "Tag $TAG already exists on origin — skipping"
             exit 0
           fi
           git tag "$TAG"
-          git push origin "refs/tags/$TAG"
+          MAX_ATTEMPTS=5 retry -- git push origin "refs/tags/$TAG"
 
-      - name: Create GitHub Release (idempotent)
+      - name: Create GitHub Release (idempotent + retry on transient failures)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ matrix.pkg.name }}@${{ matrix.pkg.version }}
@@ -236,15 +249,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          source .github/scripts/retry.sh
+          if MAX_ATTEMPTS=3 retry -- gh release view "$TAG" >/dev/null 2>&1; then
             echo "GH Release $TAG already exists — skipping"
             exit 0
           fi
           notes_file=$(mktemp)
           if node .github/scripts/extract-changelog.mjs \
               "packages/$PKG_DIR/CHANGELOG.md" "$PKG_VERSION" > "$notes_file"; then
-            gh release create "$TAG" --title "$TAG" --notes-file "$notes_file"
+            MAX_ATTEMPTS=5 retry -- gh release create "$TAG" --title "$TAG" --notes-file "$notes_file"
           else
             echo "::warning title=$TAG::CHANGELOG section not found, falling back to auto-generated notes"
-            gh release create "$TAG" --title "$TAG" --generate-notes
+            MAX_ATTEMPTS=5 retry -- gh release create "$TAG" --title "$TAG" --generate-notes
           fi
