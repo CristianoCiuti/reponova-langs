@@ -1,0 +1,67 @@
+{
+  "name": "@reponova/lang-tsx",
+  "version": "0.1.0",
+  "description": "TSX (TypeScript + JSX) language support for RepoNova",
+  "keywords": [
+    "reponova",
+    "reponova-plugin",
+    "language-plugin",
+    "tsx",
+    "jsx",
+    "typescript",
+    "react",
+    "tree-sitter",
+    "tree-sitter-tsx",
+    "ast",
+    "code-analysis",
+    "knowledge-graph",
+    "static-analysis",
+    "outline",
+    "symbol-extraction"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "grammars",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "prebuild": "pnpm -w grammar-fetch --package=lang-tsx",
+    "build": "tsup",
+    "pretest": "pnpm -w grammar-fetch --package=lang-tsx",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "peerDependencies": {
+    "reponova": "^0.4.0"
+  },
+  "devDependencies": {
+    "@reponova/lang-test-utils": "workspace:*",
+    "@reponova/lang-typescript-core": "workspace:*",
+    "reponova": "^0.4.3",
+    "web-tree-sitter": "^0.25.10"
+  },
+  "reponova": {
+    "type": "language",
+    "id": "tsx",
+    "extensions": [
+      ".tsx"
+    ],
+    "grammar": "./grammars/tree-sitter-tsx.wasm"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CristianoCiuti/reponova-langs.git",
+    "directory": "packages/lang-tsx"
+  },
+  "homepage": "https://github.com/CristianoCiuti/reponova-langs/tree/main/packages/lang-tsx"
+}

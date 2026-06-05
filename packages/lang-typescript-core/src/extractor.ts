@@ -1016,14 +1016,36 @@ export class TypescriptExtractor implements LanguageExtractor {
     const calls: string[] = [];
     const visited = new Set<string>();
 
+    const record = (name: string): void => {
+      if (!visited.has(name)) {
+        visited.add(name);
+        calls.push(name);
+      }
+    };
+
     const walk = (n: SyntaxNode): void => {
       if (n.type === "call_expression") {
         const funcNode = n.childForFieldName("function");
-        if (funcNode) {
-          const callName = funcNode.text;
-          if (!visited.has(callName)) {
-            visited.add(callName);
-            calls.push(callName);
+        if (funcNode) record(funcNode.text);
+      } else if (
+        n.type === "jsx_opening_element" ||
+        n.type === "jsx_self_closing_element"
+      ) {
+        // JSX component usages (`<Card />`, `<Card.Header />`,
+        // `<ns.Component />`) are recorded as `calls` edges. We skip native
+        // HTML / SVG tags whose name starts with a lowercase letter
+        // (`<div>`, `<button>`, `<svg>`) because they would only add
+        // graph-wide noise — a member expression always wins because it
+        // can never be a native tag.
+        const nameNode = n.childForFieldName("name");
+        if (nameNode) {
+          const text = nameNode.text;
+          if (text.length > 0) {
+            const isMember = nameNode.type === "member_expression";
+            const first = text[0]!;
+            if (isMember || (first >= "A" && first <= "Z")) {
+              record(text);
+            }
           }
         }
       }

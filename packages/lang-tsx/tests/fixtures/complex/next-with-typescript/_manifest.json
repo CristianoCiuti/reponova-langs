@@ -1,0 +1,84 @@
+{
+  "upstream": "https://github.com/vercel/next.js",
+  "ref": "84f9247617f91917bfeecd9c6d95b1dedef4a411",
+  "subpath": "examples/with-typescript",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2025 Vercel, Inc.",
+  "files": [
+    {
+      "path": "components/Layout.tsx",
+      "sha256": "3510d6f3900d8806a9ef784d54ea185a12aec933d2cd963458b242f0ff4e3aee",
+      "size": 774
+    },
+    {
+      "path": "components/List.tsx",
+      "sha256": "6e3f2c7af0fcab19190c4b0e6679369840809e801f743fdb2cb8887a63b43898",
+      "size": 324
+    },
+    {
+      "path": "components/ListDetail.tsx",
+      "sha256": "48523dbddfda8a26f94162ad00366157af4e407d7fe4654eba60634ee6b81425",
+      "size": 282
+    },
+    {
+      "path": "components/ListItem.tsx",
+      "sha256": "62aba00abd512ff7cc27265521cf63b0f33fc93071de0f596f6f325fa5712be4",
+      "size": 288
+    },
+    {
+      "path": "interfaces/index.ts",
+      "sha256": "313239f80ffc1058a83d3abf9fe4159784f2eefd2f1abb4df6b3685ec1a103e7",
+      "size": 273
+    },
+    {
+      "path": "LICENSE.txt",
+      "sha256": "ee765244e2d59f5234d474f62e0766fa0c8b99af967fdd4c0cb8dcb0c76ea224",
+      "size": 1079
+    },
+    {
+      "path": "package.json",
+      "sha256": "5cf737c95cc77f3bd023dce5cef77df3f4c97005112c519ba9906ac367968d80",
+      "size": 390
+    },
+    {
+      "path": "pages/about.tsx",
+      "sha256": "89b7de75616b5cd7bd09da40e90490bea0336ec19ca22835e2db13b3fc4d4a46",
+      "size": 304
+    },
+    {
+      "path": "pages/api/users/index.ts",
+      "sha256": "50fd53b17509391d0c947dd3e04cc5121f06c973627e58822959a60b2147da81",
+      "size": 448
+    },
+    {
+      "path": "pages/index.tsx",
+      "sha256": "cb59c64951ff645b8e16a8d6e0827624c82195027e74d3c0be2571223607d1ff",
+      "size": 285
+    },
+    {
+      "path": "pages/users/[id].tsx",
+      "sha256": "deb9eac1397fec77ced537f254c53228fa88a2f7b628e1d6ed8bcdaa321f3704",
+      "size": 1714
+    },
+    {
+      "path": "pages/users/index.tsx",
+      "sha256": "5e9e963e20fe30a9d20c55d9d7d6f0d264887c06bd941b30fbe0a1ae5933b553",
+      "size": 992
+    },
+    {
+      "path": "README.md",
+      "sha256": "9d20ef4475aaa727ea7155a40225c50a4d84ee0743374be87eb15b14120b2888",
+      "size": 2254
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "b303c5f097f5bd3cce1c1807d44e7d6bb4b1bb6b00f1254e59aec4bb4b196b26",
+      "size": 529
+    },
+    {
+      "path": "utils/sample-data.ts",
+      "sha256": "07b375534b46fb55a05398895d4db8a50917eb0c0f99e3ed959c537efcec5db7",
+      "size": 226
+    }
+  ]
+}
