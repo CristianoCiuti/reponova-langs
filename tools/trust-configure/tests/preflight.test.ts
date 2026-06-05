@@ -21,13 +21,15 @@ describe('checkNpmVersion (regression: must not return "<unknown>" on Windows)',
     expect(r.version).not.toBe('<unknown>');
   });
 
-  it('returns an `ok` flag coherent with the parsed version (>= 11.10 gate)', () => {
+  it('returns an `ok` flag coherent with the parsed version (>= 11.15 gate)', () => {
     // The CI matrix uses the npm bundled with each Node version (10.x for
     // Node 18/20/22), so we cannot hard-code `ok === true`. Instead we check
     // that `ok` matches the actual parsed version: this still catches the
     // Windows shell bug because that returns version="<unknown>" with
     // ok=false, and would also catch any future drift between the version
-    // parser and the gate itself.
+    // parser and the gate itself. The gate is `>= 11.15` because npm 11.15
+    // is the first release that emits the `permissions` field required by
+    // the registry (npm/cli#9248).
     const r = checkNpmVersion();
     if (r.version === '<unknown>') {
       expect(r.ok).toBe(false);
@@ -36,7 +38,7 @@ describe('checkNpmVersion (regression: must not return "<unknown>" on Windows)',
     const [majRaw, minRaw] = r.version.split('.');
     const maj = Number(majRaw);
     const min = Number(minRaw ?? '0');
-    const expectedOk = maj > 11 || (maj === 11 && min >= 10);
+    const expectedOk = maj > 11 || (maj === 11 && min >= 15);
     expect(r.ok).toBe(expectedOk);
   });
 });

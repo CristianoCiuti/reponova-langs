@@ -1,31 +1,41 @@
 /**
  * Regression test for the trust-configure command builder.
  *
- * We were once shipping `npm trust github ... --allow-publish --yes`. That
- * flag does not exist in any released npm CLI: the operator-provided list of
- * accepted flags for `npm trust github` is fixed by the npm CLI itself
- * (see `npm trust github --help` on npm >= 11.10), and trying to pass an
- * unknown flag makes npm refuse the entire command with EUSAGE. The bug went
- * undetected because the very first `pnpm bootstrap-plugin lang-<id>` flow
- * had to wait for an npm package to actually exist on the registry before
- * `npm trust github` could be invoked at all.
+ * Pins down `buildTrustArgs` to the documented `npm trust github` flag set
+ * for npm CLI >= 11.15 (the version that introduced `--allow-publish` /
+ * `--allow-stage-publish` and started populating the `permissions` field
+ * required by the registry — see npm/cli#9248 + #9376, released 2026-05-20).
  *
- * This test pins down `buildTrustArgs` to ONLY emit flags that npm actually
- * documents. Any future drift (someone re-introducing `--allow-publish` or
- * inventing a new flag) will fail this test before it ever reaches a user.
+ * Two regressions we have already hit and want to keep nailed down:
+ *
+ * 1. **Without `--allow-publish`**: the registry rejects POST .../trust
+ *    with `400 "permissions is required and must contain at least one valid
+ *    route"`. We confirmed this with a manual replay of the exact CLI
+ *    payload (npm/cli#9377 means the CLI does not surface that body, so we
+ *    captured it via `scripts/diagnose-trust.mjs` before deleting it).
+ *
+ * 2. **With unknown flags**: any flag outside the documented allowlist
+ *    makes npm refuse the command with `EUSAGE Unknown flag: ...`. This
+ *    happened the very first time we exercised the flow on npm 11.12.1
+ *    (which did not yet know `--allow-publish`), and pushed us — wrongly —
+ *    to remove the flag entirely. The fix is npm >= 11.15, not flag removal.
+ *
+ * Together these tests make sure we always pass the canonical flag set.
  */
 import { describe, expect, it } from 'vitest';
 import { buildTrustArgs } from '../src/index.js';
 
-// The full accepted flag set documented by `npm trust github --help`
-// (npm CLI 11.10+). Keep this list in sync with the npm docs; it is small
-// enough to be exhaustive on purpose.
+// Full accepted flag set documented in `npm trust github --help` for
+// npm CLI 11.15+. Kept exhaustive on purpose so future drift is caught.
 const ALLOWED_FLAGS = new Set([
   '--file',
   '--repository',
   '--repo',
   '--environment',
   '--env',
+  '--allow-publish',
+  '--allow-stage-publish',
+  '--allow-staged-publish',
   '--dry-run',
   '--json',
   '--registry',
@@ -56,19 +66,20 @@ describe('buildTrustArgs', () => {
     expect(args).toContain('--yes');
   });
 
+  it('passes --allow-publish (required by the registry since 2026-05-20)', () => {
+    // Without this flag, npm CLI >= 11.15 sends an empty `permissions`
+    // array and the registry replies 400 "permissions is required and
+    // must contain at least one valid route". This is exactly the bug
+    // that broke `pnpm bootstrap-plugin lang-typescript --yes`.
+    const args = buildTrustArgs('@reponova/lang-typescript');
+    expect(args).toContain('--allow-publish');
+  });
+
   it('does NOT pass any flag outside the documented npm allowlist', () => {
     const args = buildTrustArgs('@reponova/lang-typescript');
     const flags = args.filter((a) => a.startsWith('-'));
     for (const f of flags) {
       expect(ALLOWED_FLAGS, `flag ${f} is not accepted by 'npm trust github'`).toContain(f);
     }
-  });
-
-  it('explicitly rejects the historical --allow-publish bug', () => {
-    // This is a paranoia assertion against the specific regression we hit.
-    // Trust-publishing is the entire point of the relationship; there is no
-    // separate permission flag in npm.
-    const args = buildTrustArgs('@reponova/lang-typescript');
-    expect(args).not.toContain('--allow-publish');
   });
 });

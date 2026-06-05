@@ -16,10 +16,13 @@
  *   pnpm trust:configure --apply      # actually run npm trust github for each
  *
  * Prerequisites for --apply:
- *   - npm CLI >= 11.10.0 (the `npm trust` subcommand)
+ *   - npm CLI >= 11.15.0 — required because the registry now mandates the
+ *     `permissions` field in the trust payload (added in npm/cli#9248,
+ *     released in 11.15) and rejects older payloads with
+ *     `400 "permissions is required and must contain at least one valid route"`
  *   - Logged in: `npm login` (interactive)
- *   - 2FA: when prompted, accept "skip 2FA for the next 5 minutes" so all
- *     packages can be processed in a single session
+ *   - 2FA in "auth-and-writes" mode (the trust API ignores classic OTP
+ *     bypasses and forces a fresh webauth handshake on every call)
  *   - The package must already exist on npm (first publish must be a manual
  *     `npm publish` with OTP, or via the npm UI's Trusted Publisher setup)
  */
@@ -78,9 +81,10 @@ Discovers every non-private @reponova/lang-* package in packages/, then
 configures the GitHub Actions OIDC trusted publisher on npmjs.com for each.
 
 Prerequisites for --apply:
-  - npm CLI >= 11.10.0
+  - npm CLI >= 11.15.0 (required by the registry's \`permissions\` field)
   - Logged in: \`npm login\`
-  - 2FA: choose "skip 2FA for the next 5 minutes" on the first prompt
+  - 2FA in "auth-and-writes" mode (every trust call triggers a fresh
+    webauth handshake regardless of OTP bypass settings)
   - Each package must already exist on npm (first publish must be manual)`);
 }
 
@@ -119,15 +123,21 @@ async function discoverPackages(root: string): Promise<DiscoveredPackage[]> {
 }
 
 /**
- * Build the argv for `npm trust github`. Pure function so it can be unit-tested
- * against the (small) flag allowlist documented by `npm trust github --help`.
+ * Build the argv for `npm trust github`. Pure function so it can be
+ * unit-tested against the flag allowlist documented in `npm trust github
+ * --help` (npm CLI >= 11.15).
  *
- * IMPORTANT: do not invent flags here. The accepted set is, verbatim, the one
- * documented by npm 11.10+:
+ * IMPORTANT — do not invent flags here. The accepted set, verbatim:
  *   --file (required), --repository|--repo, --environment|--env,
+ *   --allow-publish, --allow-stage-publish (alias --allow-staged-publish),
  *   --dry-run, --json, --registry, -y|--yes
- * In particular there is **no** `--allow-publish`: trust-publishing is the
- * only purpose of the relationship, so the permission is implicit.
+ *
+ * `--allow-publish` is REQUIRED in practice: since 2026-05-20 the registry
+ * refuses POST .../trust without a `permissions` entry, and the only
+ * permission we want for OIDC release publishes is "create package"
+ * (i.e. `--allow-publish`). Without it the registry returns
+ * `400 Bad Request - "permissions is required and must contain at least
+ * one valid route"`.
  */
 export function buildTrustArgs(
   pkgName: string,
@@ -142,6 +152,7 @@ export function buildTrustArgs(
     repo,
     "--file",
     workflow,
+    "--allow-publish",
     "--yes",
   ];
 }
@@ -199,7 +210,16 @@ async function main(): Promise<void> {
   const npmVer = checkNpmVersion();
   if (!npmVer.ok) {
     console.error(
-      `[trust-configure] npm >= 11.10.0 is required for the trust subcommand (got ${npmVer.version}).`,
+      `[trust-configure] npm >= 11.15.0 is required (got ${npmVer.version}).`,
+    );
+    console.error(
+      `[trust-configure] 11.15 added the --allow-publish flag and the `,
+    );
+    console.error(
+      `[trust-configure] 'permissions' field that the registry now requires;`,
+    );
+    console.error(
+      `[trust-configure] older versions get 400 "permissions is required ...".`,
     );
     console.error(`[trust-configure] run: npm install -g npm@latest`);
     process.exit(1);

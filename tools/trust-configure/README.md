@@ -13,19 +13,20 @@ Each npm package on npmjs.com can have **one** Trusted Publisher entry. There is
 | Provider | GitHub Actions |
 | Repository | `CristianoCiuti/reponova-langs` |
 | Workflow filename | `release.yml` |
+| Permission | `--allow-publish` (required since 2026-05-20) |
 
-After this runs once, the `release.yml` workflow can publish each package via OIDC, with **no `NPM_TOKEN` secret** required. (Permission to publish is the entire point of the trust relationship — there is no separate flag for it.)
+After this runs once, the `release.yml` workflow can publish each package via OIDC, with **no `NPM_TOKEN` secret** required.
 
 ## Prerequisites
 
-1. **npm CLI >= 11.10.0** (the version that introduced the `npm trust` subcommand). Check with:
+1. **npm CLI >= 11.15.0** — required by the npm registry. The `permissions` field on the trust payload (added in [`npm/cli#9248`](https://github.com/npm/cli/pull/9248), released in npm 11.15.0 on 2026-05-20) is now mandatory; older CLIs send an empty `permissions` array and the registry rejects every call with `400 "permissions is required and must contain at least one valid route"`. Check / upgrade with:
    ```bash
    npm --version
    # if older:
    npm install -g npm@latest
    ```
 2. **Logged in to npm**: `npm login`
-3. **2FA**: when prompted on the first package, accept _"skip 2FA for the next 5 minutes"_ so the rest of the packages process without re-authentication
+3. **2FA in "auth-and-writes" mode**. Every call to the trust API triggers a fresh webauth handshake on its own — the "skip 2FA for the next 5 minutes" toggle does **not** apply, so you'll need your security key handy for each of the 4 packages (\~10 seconds per package).
 4. **Package already exists on npm**: Trusted Publisher can only be configured on existing packages. For a brand-new plugin, do **one** manual `npm publish` (with OTP) of the initial version first, then run this tool
 
 ## Usage
@@ -44,7 +45,7 @@ pnpm trust:configure --apply
 The script:
 
 - Discovers every non-private `@reponova/lang-*` package via `packages/*/package.json`
-- Runs `npm trust github <pkg> --repo CristianoCiuti/reponova-langs --file release.yml --yes` for each
+- Runs `npm trust github <pkg> --repo CristianoCiuti/reponova-langs --file release.yml --allow-publish --yes` for each
 - Sleeps 2 seconds between calls (npm registry rate-limit friendly)
 - Reports a summary at the end and exits non-zero if any package failed
 
