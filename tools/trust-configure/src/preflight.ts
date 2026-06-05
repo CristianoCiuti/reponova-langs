@@ -19,8 +19,24 @@ export interface NpmVersionResult {
 }
 
 /**
- * Returns the running npm CLI version, gating on `>= 11.10` (required by the
- * `npm trust` subcommand). Uses `shell: true` so it works on Windows.
+ * Minimum npm CLI required by `trust-configure`.
+ *
+ * - 11.10 introduced the `npm trust` subcommand itself.
+ * - 11.15 added the `--allow-publish` / `--allow-stage-publish` flags
+ *   (npm/cli#9248, backported as #9376) and started populating the new
+ *   `permissions` field in the registry payload. Since 2026-05-20 the
+ *   registry **requires** `permissions` and rejects POST .../trust with
+ *   `400 "permissions is required and must contain at least one valid route"`
+ *   when called without it. So 11.15 is the first version that actually
+ *   works end-to-end against the live registry.
+ */
+export const MIN_NPM_MAJOR = 11;
+export const MIN_NPM_MINOR = 15;
+
+/**
+ * Returns the running npm CLI version, gating on the minimum that produces
+ * a valid `npm trust github` payload (see `MIN_NPM_*`). Uses `shell: true`
+ * so it works on Windows, where `npm` is `npm.cmd`.
  */
 export function checkNpmVersion(): NpmVersionResult {
   const r = spawnSync("npm", ["--version"], { encoding: "utf8", shell: true });
@@ -32,8 +48,10 @@ export function checkNpmVersion(): NpmVersionResult {
   if (typeof major !== "number" || Number.isNaN(major)) {
     return { ok: false, version };
   }
-  if (major > 11) return { ok: true, version };
-  if (major === 11 && (minor ?? 0) >= 10) return { ok: true, version };
+  if (major > MIN_NPM_MAJOR) return { ok: true, version };
+  if (major === MIN_NPM_MAJOR && (minor ?? 0) >= MIN_NPM_MINOR) {
+    return { ok: true, version };
+  }
   return { ok: false, version };
 }
 
