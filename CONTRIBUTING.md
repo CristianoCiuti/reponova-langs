@@ -23,10 +23,7 @@ The `prebuild` and `pretest` hooks of plugins that ship a tree-sitter grammar (e
 
 ```
 packages/
-  lang-typescript/       # @reponova/lang-typescript  (published)
-  lang-python/           # @reponova/lang-python      (published)
-  lang-plantuml/         # @reponova/lang-plantuml    (published)
-  lang-svg/              # @reponova/lang-svg         (published)
+  lang-*/                # @reponova/lang-*  (one published plugin per language / asset type)
   lang-test-utils/       # internal: shared test helpers
   scaffold/              # internal: `pnpm scaffold` CLI
 tools/
