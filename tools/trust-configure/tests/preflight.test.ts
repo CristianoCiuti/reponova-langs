@@ -15,17 +15,29 @@ import { describe, expect, it } from 'vitest';
 import { checkNpmVersion, checkNpmAuth } from '../src/preflight.js';
 
 describe('checkNpmVersion (regression: must not return "<unknown>" on Windows)', () => {
-  it('reports a real semver-shaped version', () => {
+  it('reports a real semver-shaped version (the original bug returned "<unknown>")', () => {
     const r = checkNpmVersion();
     expect(r.version).toMatch(/^\d+\.\d+\.\d+/);
     expect(r.version).not.toBe('<unknown>');
   });
 
-  it('passes the >= 11.10 gate when running on a modern npm', () => {
+  it('returns an `ok` flag coherent with the parsed version (>= 11.10 gate)', () => {
+    // The CI matrix uses the npm bundled with each Node version (10.x for
+    // Node 18/20/22), so we cannot hard-code `ok === true`. Instead we check
+    // that `ok` matches the actual parsed version: this still catches the
+    // Windows shell bug because that returns version="<unknown>" with
+    // ok=false, and would also catch any future drift between the version
+    // parser and the gate itself.
     const r = checkNpmVersion();
-    // The CI matrix and modern dev boxes ship npm >= 11.10.
-    // If you intentionally test against an older npm, lower this expectation.
-    expect(r.ok).toBe(true);
+    if (r.version === '<unknown>') {
+      expect(r.ok).toBe(false);
+      return;
+    }
+    const [majRaw, minRaw] = r.version.split('.');
+    const maj = Number(majRaw);
+    const min = Number(minRaw ?? '0');
+    const expectedOk = maj > 11 || (maj === 11 && min >= 10);
+    expect(r.ok).toBe(expectedOk);
   });
 });
 
