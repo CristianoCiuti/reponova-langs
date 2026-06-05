@@ -118,21 +118,39 @@ async function discoverPackages(root: string): Promise<DiscoveredPackage[]> {
   return out;
 }
 
-// On Windows, `npm` is `npm.cmd` (a batch file): Node's `spawnSync` cannot
-// invoke it directly, so we always go through the shell. On POSIX `shell: true`
-// is harmless. Same pattern as `tools/bootstrap-plugin/src/index.ts`.
-function configureTrust(pkgName: string): boolean {
-  const args = [
+/**
+ * Build the argv for `npm trust github`. Pure function so it can be unit-tested
+ * against the (small) flag allowlist documented by `npm trust github --help`.
+ *
+ * IMPORTANT: do not invent flags here. The accepted set is, verbatim, the one
+ * documented by npm 11.10+:
+ *   --file (required), --repository|--repo, --environment|--env,
+ *   --dry-run, --json, --registry, -y|--yes
+ * In particular there is **no** `--allow-publish`: trust-publishing is the
+ * only purpose of the relationship, so the permission is implicit.
+ */
+export function buildTrustArgs(
+  pkgName: string,
+  repo: string = REPO,
+  workflow: string = WORKFLOW,
+): readonly string[] {
+  return [
     "trust",
     "github",
     pkgName,
     "--repo",
-    REPO,
+    repo,
     "--file",
-    WORKFLOW,
-    "--allow-publish",
+    workflow,
     "--yes",
   ];
+}
+
+// On Windows, `npm` is `npm.cmd` (a batch file): Node's `spawnSync` cannot
+// invoke it directly, so we always go through the shell. On POSIX `shell: true`
+// is harmless. Same pattern as `tools/bootstrap-plugin/src/index.ts`.
+function configureTrust(pkgName: string): boolean {
+  const args = buildTrustArgs(pkgName);
   console.log(`[trust-configure] $ npm ${args.join(" ")}`);
   const r = spawnSync("npm", args, { stdio: "inherit", shell: true });
   if (r.status === 0) {
@@ -173,9 +191,7 @@ async function main(): Promise<void> {
     console.log(`[trust-configure] dry-run. Re-run with --apply to configure.`);
     console.log(`[trust-configure] Equivalent commands that would run:`);
     for (const p of pkgs) {
-      console.log(
-        `[trust-configure]   npm trust github ${p.name} --repo ${REPO} --file ${WORKFLOW} --allow-publish --yes`,
-      );
+      console.log(`[trust-configure]   npm ${buildTrustArgs(p.name).join(" ")}`);
     }
     return;
   }
@@ -222,7 +238,13 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  console.error((err as Error).stack ?? String(err));
-  process.exit(1);
-});
+// Only run when invoked as the entry point (i.e. `tsx src/index.ts ...`),
+// NOT when imported by Vitest. Without this guard, importing this module
+// from a test file would run the full CLI as a side effect.
+const __filename = fileURLToPath(import.meta.url);
+if (process.argv[1] === __filename) {
+  main().catch((err) => {
+    console.error((err as Error).stack ?? String(err));
+    process.exit(1);
+  });
+}
