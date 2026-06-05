@@ -226,9 +226,32 @@ async function runHarnessTty(): Promise<ChildOutcome> {
 }
 
 describe("spawnNpmViaPty: process-termination contract", () => {
+  // Cache: `node-pty` itself uses `posix_spawnp(forkpty)` on macOS/Linux
+  // and ConPTY on Windows. The GH Actions `macos-latest` sandbox refuses
+  // `posix_spawnp` for PTY allocation (verified on Node 18/20/22), so
+  // BOTH tests are unrunnable there — even the non-TTY harness fails,
+  // because internally it ends up calling `spawnNpmViaPty(["--version"])`
+  // which itself imports `node-pty`. Skip both rather than red-X CI on a
+  // host that physically can't host the test infrastructure. Linux and
+  // Windows runners (where the bug originally manifested) keep
+  // exercising the regression path.
+  let cachedPtyError: string | null | undefined;
+  async function getPtyError(): Promise<string | null> {
+    if (cachedPtyError === undefined) {
+      cachedPtyError = await probePtyAvailability();
+    }
+    return cachedPtyError;
+  }
+
   it(
     "child Node terminates within the budget when stdin is NOT a TTY (sanity check)",
-    async () => {
+    async (ctx) => {
+      const ptyError = await getPtyError();
+      if (ptyError !== null) {
+        ctx.skip(`node-pty cannot allocate a PTY on this host (${ptyError.slice(0, 200)}); the harness depends on it transitively`);
+        return;
+      }
+
       const r = await runHarnessNonTty();
       const debug = `exit=${r.exitCode} elapsed=${r.elapsedMs}ms stdout=${JSON.stringify(r.stdout.slice(0, 400))} stderr=${JSON.stringify(r.stderr.slice(0, 400))}`;
       expect(r.killedByTimeout, `child hung past ${CHILD_TIMEOUT_MS}ms; ${debug}`).toBe(false);
@@ -241,15 +264,9 @@ describe("spawnNpmViaPty: process-termination contract", () => {
   it(
     "child Node terminates within the budget when stdin IS a TTY (regression for the trust-configure hang)",
     async (ctx) => {
-      // GH Actions `macos-latest` runners refuse `posix_spawnp(forkpty)`,
-      // which makes `node-pty` unable to allocate a PTY at all on that
-      // host. That's an environment limitation, not a regression in the
-      // production fix — Linux and Windows runners exercise the same
-      // code path. Skip rather than red-X CI on hosts that can't host
-      // the test infrastructure.
-      const ptyError = await probePtyAvailability();
+      const ptyError = await getPtyError();
       if (ptyError !== null) {
-        ctx.skip(`PTY unavailable on this host (${ptyError}); the production fix still applies but cannot be smoke-tested here`);
+        ctx.skip(`node-pty cannot allocate a PTY on this host (${ptyError.slice(0, 200)}); the production fix still applies but cannot be smoke-tested here`);
         return;
       }
 
