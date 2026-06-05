@@ -45,11 +45,12 @@ pnpm trust:configure --apply
 The script:
 
 - Discovers every non-private `@reponova/lang-*` package via `packages/*/package.json`
-- Runs `npm trust github <pkg> --repo CristianoCiuti/reponova-langs --file release.yml --allow-publish --yes` for each
+- For each package, performs a **best-effort** fast-path skip via `npm trust list <pkg> --json`. The npm registry's trust-read endpoint also requires OTP, so this only succeeds while you are inside a recent webauth cooldown — when it does succeed it skips already-configured packages with zero security-key taps.
+- Otherwise runs `npm trust github <pkg> --repo CristianoCiuti/reponova-langs --file release.yml --allow-publish --yes`. If the registry replies `409 Conflict` (the canonical "this trust already exists" signal) the script treats it as a **skipped** package, never as a failure.
 - Sleeps 2 seconds between calls (npm registry rate-limit friendly)
-- Reports a summary at the end and exits non-zero if any package failed
+- Reports a `ok / skipped / failed` summary and exits non-zero only if any package failed
 
-It is **idempotent**: re-running it on already-configured packages is a no-op or a re-confirmation, never destructive.
+The combination is **fully idempotent**: re-running it on a fully-configured monorepo always reports `0 ok, N skipped, 0 failed` and exits 0, regardless of whether you are inside the OTP cooldown or not.
 
 ## Adding a new plugin: end-to-end flow
 
