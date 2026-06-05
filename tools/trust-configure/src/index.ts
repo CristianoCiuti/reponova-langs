@@ -28,6 +28,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
+import { checkNpmAuth, checkNpmVersion } from "./preflight.js";
+
 const REPO = "CristianoCiuti/reponova-langs";
 const WORKFLOW = "release.yml";
 const SCOPE_PREFIX = "@reponova/lang-";
@@ -116,29 +118,9 @@ async function discoverPackages(root: string): Promise<DiscoveredPackage[]> {
   return out;
 }
 
-function checkNpmVersion(): { ok: boolean; version: string } {
-  const r = spawnSync("npm", ["--version"], { encoding: "utf8" });
-  if (r.status !== 0) {
-    return { ok: false, version: "<unknown>" };
-  }
-  const version = r.stdout.trim();
-  const [major, minor] = version.split(".").map((n) => Number(n));
-  if (typeof major !== "number" || Number.isNaN(major)) {
-    return { ok: false, version };
-  }
-  if (major > 11) return { ok: true, version };
-  if (major === 11 && (minor ?? 0) >= 10) return { ok: true, version };
-  return { ok: false, version };
-}
-
-function checkNpmAuth(): { ok: boolean; user: string } {
-  const r = spawnSync("npm", ["whoami"], { encoding: "utf8" });
-  if (r.status !== 0) {
-    return { ok: false, user: "" };
-  }
-  return { ok: true, user: r.stdout.trim() };
-}
-
+// On Windows, `npm` is `npm.cmd` (a batch file): Node's `spawnSync` cannot
+// invoke it directly, so we always go through the shell. On POSIX `shell: true`
+// is harmless. Same pattern as `tools/bootstrap-plugin/src/index.ts`.
 function configureTrust(pkgName: string): boolean {
   const args = [
     "trust",
@@ -152,7 +134,7 @@ function configureTrust(pkgName: string): boolean {
     "--yes",
   ];
   console.log(`[trust-configure] $ npm ${args.join(" ")}`);
-  const r = spawnSync("npm", args, { stdio: "inherit" });
+  const r = spawnSync("npm", args, { stdio: "inherit", shell: true });
   if (r.status === 0) {
     console.log(`[trust-configure]   ok`);
     return true;
