@@ -1,5 +1,11 @@
 # @reponova/lang-typescript
 
+## 0.1.1
+
+### Patch Changes
+
+- 99669f9: Internal refactor: the `TypescriptExtractor` and outline implementation move to the workspace-internal `@reponova/lang-typescript-core` package and are now bundled inline at publish time. Public API and on-the-wire tarball contents are unchanged for consumers; the extractor is now parameterizable so it can be reused as-is by the upcoming `@reponova/lang-tsx` sibling plugin.
+
 ## 0.1.0
 
 ### Minor Changes
