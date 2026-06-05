@@ -118,14 +118,67 @@ function walkTopLevel(
         break;
       }
       case "function_declaration":
+      case "generator_function_declaration":
       case "class_declaration":
       case "abstract_class_declaration":
       case "interface_declaration":
       case "lexical_declaration":
       case "variable_declaration":
+        // For lexical/variable declarations we ALSO sniff out CommonJS
+        // `require()` patterns and surface them as imports — keeps the
+        // outline graph homogeneous between ESM and CJS files.
+        if (child.type === "lexical_declaration" || child.type === "variable_declaration") {
+          tsExtractRequireImports(child, imports);
+        }
         collectDeclarationOutline(child, functions, classes);
         break;
     }
+  }
+}
+
+/**
+ * CommonJS `require()` imports for the outline pipeline. Mirror of the
+ * extractor's `extractRequireImports` but emitting the lighter
+ * `ImportEntry` shape used by the outline view.
+ */
+function tsExtractRequireImports(
+  declarationNode: SyntaxNode,
+  imports: ImportEntry[],
+): void {
+  for (const declarator of declarationNode.namedChildren) {
+    if (declarator.type !== "variable_declarator") continue;
+    const value = declarator.childForFieldName("value");
+    if (!value || value.type !== "call_expression") continue;
+    const fn = value.childForFieldName("function");
+    if (!fn || fn.type !== "identifier" || fn.text !== "require") continue;
+    const args = value.childForFieldName("arguments");
+    if (!args) continue;
+    const stringArg = args.namedChildren.find((c) => c.type === "string");
+    if (!stringArg) continue;
+    const module = unquoteString(stringArg.text);
+
+    const names: string[] = [];
+    const binding = declarator.childForFieldName("name");
+    if (binding) {
+      if (binding.type === "identifier") {
+        names.push(binding.text);
+      } else if (binding.type === "object_pattern") {
+        for (const prop of binding.namedChildren) {
+          if (prop.type === "shorthand_property_identifier_pattern") {
+            names.push(prop.text);
+          } else if (prop.type === "pair_pattern") {
+            const keyNode = prop.childForFieldName("key");
+            if (keyNode) names.push(keyNode.text);
+          }
+        }
+      }
+    }
+
+    imports.push({
+      module,
+      names: names.length > 0 ? names : undefined,
+      line: declarationNode.startPosition.row + 1,
+    });
   }
 }
 
@@ -136,6 +189,7 @@ function collectDeclarationOutline(
 ): void {
   switch (node.type) {
     case "function_declaration":
+    case "generator_function_declaration":
       functions.push(tsExtractFunction(node));
       return;
 
@@ -240,17 +294,22 @@ function tsExtractClass(node: SyntaxNode): ClassEntry {
   const bases: string[] = [];
   const heritage = node.namedChildren.find((c) => c.type === "class_heritage");
   if (heritage) {
+    // Two grammar shapes — see extractor.ts `extractHeritage` for the
+    // detailed rationale.
+    //   TS:  class_heritage > extends_clause > <expression>
+    //   JS:  class_heritage > <expression>
+    const isHeritageBase = (n: SyntaxNode): boolean =>
+      n.type === "identifier"
+      || n.type === "type_identifier"
+      || n.type === "member_expression"
+      || n.type === "generic_type";
     for (const clause of heritage.namedChildren) {
-      if (clause.type !== "extends_clause" && clause.type !== "implements_clause") continue;
-      for (const value of clause.namedChildren) {
-        if (
-          value.type === "identifier"
-          || value.type === "type_identifier"
-          || value.type === "member_expression"
-          || value.type === "generic_type"
-        ) {
-          bases.push(bareTypeName(value));
+      if (clause.type === "extends_clause" || clause.type === "implements_clause") {
+        for (const value of clause.namedChildren) {
+          if (isHeritageBase(value)) bases.push(bareTypeName(value));
         }
+      } else if (isHeritageBase(clause)) {
+        bases.push(bareTypeName(clause));
       }
     }
   }
@@ -340,6 +399,12 @@ function tsExtractCalls(node: SyntaxNode): string[] {
       if (fn && !seen.has(fn.text)) {
         seen.add(fn.text);
         calls.push(fn.text);
+      }
+    } else if (n.type === "new_expression") {
+      const ctor = n.childForFieldName("constructor");
+      if (ctor && !seen.has(ctor.text)) {
+        seen.add(ctor.text);
+        calls.push(ctor.text);
       }
     }
     for (const child of n.namedChildren) walk(child);

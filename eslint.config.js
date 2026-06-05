@@ -66,4 +66,14 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
+  {
+    // Hand-authored CommonJS / pre-ES-module fixtures used to exercise the
+    // `require()` recogniser of the JS extractor: by definition they MUST
+    // use `require()` to be useful test inputs, so the no-require-imports
+    // rule is muted under tests/fixtures/.
+    files: ['**/tests/fixtures/**/*.{cjs,js}'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
 );

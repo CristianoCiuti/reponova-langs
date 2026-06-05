@@ -1,0 +1,3 @@
+# Pin every snapshot file to LF and bypass autocrlf, so the SHA-256 hashes
+# in _manifest.json stay byte-exact across Windows / macOS / Linux clones.
+* -text eol=lf

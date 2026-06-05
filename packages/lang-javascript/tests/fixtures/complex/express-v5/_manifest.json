@@ -1,0 +1,40 @@
+{
+  "upstream": "https://github.com/expressjs/express",
+  "ref": "d14b2de782c16fbef39541c9009b01bd6ae90b92",
+  "tag": "v5.0.1",
+  "subpath": "lib",
+  "license": "MIT",
+  "copyright": "Copyright (c) 2009-2014 TJ Holowaychuk <tj@vision-media.ca>; Copyright (c) 2013-2014 Roman Shtylman <shtylman+expressjs@gmail.com>; Copyright (c) 2014-2015 Douglas Christopher Wilson <doug@somethingdoug.com>",
+  "files": [
+    {
+      "path": "lib/application.js",
+      "sha256": "df2e1a76e23b5e3a7a47cf247a375cda398b6706aee49943ca3824f7d6188b06",
+      "size": 14125
+    },
+    {
+      "path": "lib/express.js",
+      "sha256": "0aa326840740c01a4f7e712f8fcead4878dee5748f7d5f74811f81f8984fa6ff",
+      "size": 1631
+    },
+    {
+      "path": "lib/request.js",
+      "sha256": "02ed06b254d28a5f6c0522748cf97014b53bc9bd0701c4c13a3ba58283417520",
+      "size": 11711
+    },
+    {
+      "path": "lib/response.js",
+      "sha256": "49e14ac224a0d441f75cf74c85b1d40f8b2f65d261c475fb7b08cc1bd0697bf9",
+      "size": 24193
+    },
+    {
+      "path": "lib/utils.js",
+      "sha256": "7fea423a56bddc9cf30ffe73fac4d834d66fd699fb43093885506bfc9e50faea",
+      "size": 4690
+    },
+    {
+      "path": "lib/view.js",
+      "sha256": "dbbaa77944cfd518f1c513cba4080566472283aab7d54713d32389b9fd168cb6",
+      "size": 3799
+    }
+  ]
+}
