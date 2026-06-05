@@ -1,28 +1,39 @@
 import { describe, it, expect } from "vitest";
-import { plugin, TypescriptExtractor } from "../src/index.js";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { TypescriptExtractor } from "../src/index.js";
 import { loadGrammar } from "@reponova/lang-test-utils";
 import type { SyntaxTree } from "reponova";
 
-describe("@reponova/lang-typescript plugin", () => {
-  it("exports a valid LanguagePlugin", () => {
-    expect(plugin.id).toBe("typescript");
-    expect(plugin.extensions).toEqual([".ts", ".mts", ".cts"]);
-    expect(plugin.grammarPath).toBeDefined();
-    expect(plugin.extractor).toBeInstanceOf(TypescriptExtractor);
-    expect(plugin.outline).toBeDefined();
-  });
+const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const grammarPath = resolve(
+  packageRoot,
+  "../lang-typescript/grammars/tree-sitter-typescript.wasm",
+);
 
-  it("extractor has correct metadata", () => {
+describe("TypescriptExtractor metadata (default TypeScript flavor)", () => {
+  it("uses TS-flavored defaults when constructed without options", () => {
     const ext = new TypescriptExtractor();
     expect(ext.languageId).toBe("typescript");
     expect(ext.extensions).toEqual([".ts", ".mts", ".cts"]);
     expect(ext.wasmFile).toBe("tree-sitter-typescript.wasm");
   });
+
+  it("honors constructor overrides (TSX flavor preview)", () => {
+    const ext = new TypescriptExtractor({
+      languageId: "tsx",
+      extensions: [".tsx"],
+      wasmFile: "tree-sitter-tsx.wasm",
+    });
+    expect(ext.languageId).toBe("tsx");
+    expect(ext.extensions).toEqual([".tsx"]);
+    expect(ext.wasmFile).toBe("tree-sitter-tsx.wasm");
+  });
 });
 
 describe("TypescriptExtractor.extract (requires tree-sitter)", () => {
   async function parse(source: string): Promise<SyntaxTree> {
-    const loaded = await loadGrammar(plugin.grammarPath!);
+    const loaded = await loadGrammar(grammarPath);
     if (!loaded) throw new Error("grammar not available; run `pnpm grammar-fetch`");
     return loaded.parse(source) as SyntaxTree;
   }

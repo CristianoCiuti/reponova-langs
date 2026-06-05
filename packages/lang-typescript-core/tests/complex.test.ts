@@ -15,11 +15,15 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SyntaxTree } from "reponova";
-import { plugin, TypescriptExtractor } from "../src/index.js";
+import { TypescriptExtractor } from "../src/index.js";
 import { loadGrammar } from "@reponova/lang-test-utils";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureRoot = resolve(packageRoot, "tests/fixtures/complex/zod-v3.24.1");
+const grammarPath = resolve(
+  packageRoot,
+  "../lang-typescript/grammars/tree-sitter-typescript.wasm",
+);
 
 function walkTsFiles(root: string): string[] {
   const out: string[] = [];
@@ -40,7 +44,7 @@ function walkTsFiles(root: string): string[] {
 
 describe("complex fixture: zod v3.24.1", () => {
   it("parses every snapshot file without errors and emits non-empty symbols", async () => {
-    const loaded = await loadGrammar(plugin.grammarPath!);
+    const loaded = await loadGrammar(grammarPath);
     if (!loaded) throw new Error("grammar not available; run `pnpm grammar-fetch`");
 
     const files = walkTsFiles(join(fixtureRoot, "src"));
@@ -82,7 +86,7 @@ describe("complex fixture: zod v3.24.1", () => {
   });
 
   it("extracts landmark Zod classes from src/types.ts", async () => {
-    const loaded = await loadGrammar(plugin.grammarPath!);
+    const loaded = await loadGrammar(grammarPath);
     if (!loaded) throw new Error("grammar not available; run `pnpm grammar-fetch`");
 
     const source = readFileSync(join(fixtureRoot, "src/types.ts"), "utf8");
@@ -110,7 +114,7 @@ describe("complex fixture: zod v3.24.1", () => {
   });
 
   it("extracts ZodError class with its key methods from src/ZodError.ts", async () => {
-    const loaded = await loadGrammar(plugin.grammarPath!);
+    const loaded = await loadGrammar(grammarPath);
     if (!loaded) throw new Error("grammar not available; run `pnpm grammar-fetch`");
 
     const source = readFileSync(join(fixtureRoot, "src/ZodError.ts"), "utf8");
@@ -127,7 +131,7 @@ describe("complex fixture: zod v3.24.1", () => {
   });
 
   it("captures barrel re-exports from src/external.ts", async () => {
-    const loaded = await loadGrammar(plugin.grammarPath!);
+    const loaded = await loadGrammar(grammarPath);
     if (!loaded) throw new Error("grammar not available; run `pnpm grammar-fetch`");
 
     const source = readFileSync(join(fixtureRoot, "src/external.ts"), "utf8");
@@ -142,7 +146,7 @@ describe("complex fixture: zod v3.24.1", () => {
   });
 
   it("handles deep generics in src/helpers/util.ts without crashing", async () => {
-    const loaded = await loadGrammar(plugin.grammarPath!);
+    const loaded = await loadGrammar(grammarPath);
     if (!loaded) throw new Error("grammar not available; run `pnpm grammar-fetch`");
 
     const source = readFileSync(join(fixtureRoot, "src/helpers/util.ts"), "utf8");

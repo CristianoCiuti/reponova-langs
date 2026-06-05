@@ -30,9 +30,14 @@ jobs:
       # Fetch tree-sitter .wasm grammars from upstream releases and verify SHA-256.
       # Idempotent: if a grammar is already present and matches the manifest, it skips.
       - run: pnpm grammar-fetch
+      # Build BEFORE typecheck: workspace-internal packages whose `types` point
+      # to `dist/index.d.ts` (e.g. `@reponova/lang-typescript-core`, consumed
+      # by `@reponova/lang-typescript` and `@reponova/lang-tsx` via `tsup
+      # --noExternal`) need their `dist/` populated for downstream packages
+      # to resolve their declarations during `tsc --noEmit`.
+      - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm build
       - run: pnpm test
 
   # Aggregator: this is the single check that branch protection requires.

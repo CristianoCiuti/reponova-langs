@@ -1,0 +1,32 @@
+{
+  "name": "@reponova/lang-typescript-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared TypeScript-family extractor and outline for @reponova/lang-typescript and @reponova/lang-tsx (workspace-internal, never published to npm).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "pretest": "pnpm -w grammar-fetch --package=lang-typescript",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "reponova": "^0.4.3"
+  },
+  "devDependencies": {
+    "@reponova/lang-test-utils": "workspace:*",
+    "web-tree-sitter": "^0.25.10"
+  },
+  "license": "MIT"
+}

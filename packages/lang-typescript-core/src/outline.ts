@@ -1,9 +1,15 @@
 /**
- * TypeScript language support for the outline pipeline.
+ * TypeScript-family language support for the outline pipeline.
  *
  * Two strategies, mirroring the python plugin:
- *   1. tree-sitter (primary): full AST via `tree-sitter-typescript.wasm`
+ *   1. tree-sitter (primary): full AST via a tree-sitter-typescript-compatible WASM
  *   2. regex (fallback): pattern matching when WASM is unavailable
+ *
+ * The two strategies above are language-flavor agnostic: they walk the same
+ * node types produced by both `tree-sitter-typescript.wasm` and
+ * `tree-sitter-tsx.wasm`. The only flavor-specific bit is which WASM file
+ * the host RepoNova process should load, which is what the
+ * `createTypescriptOutline({ wasmFile })` factory parameterizes.
  */
 import type { LanguageSupport, SyntaxNode } from "reponova";
 
@@ -40,11 +46,29 @@ interface FileOutline {
   classes: ClassEntry[];
 }
 
-export const typescript: LanguageSupport = {
-  wasmFile: "tree-sitter-typescript.wasm",
-  treeSitterExtract,
-  regexExtract,
-};
+/** Options for {@link createTypescriptOutline}. */
+export interface TypescriptOutlineOptions {
+  /** WASM grammar filename. Defaults to `tree-sitter-typescript.wasm`. */
+  readonly wasmFile?: string;
+}
+
+/**
+ * Build a `LanguageSupport` for the outline pipeline, parameterised on the
+ * grammar wasm filename. Pass `{ wasmFile: "tree-sitter-tsx.wasm" }` from
+ * the `lang-tsx` plugin; pass `{}` (or omit) from `lang-typescript`.
+ */
+export function createTypescriptOutline(
+  options: TypescriptOutlineOptions = {},
+): LanguageSupport {
+  return {
+    wasmFile: options.wasmFile ?? "tree-sitter-typescript.wasm",
+    treeSitterExtract,
+    regexExtract,
+  };
+}
+
+/** Default TypeScript-flavor `LanguageSupport` (back-compat re-export). */
+export const typescript: LanguageSupport = createTypescriptOutline();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TREE-SITTER EXTRACTION
