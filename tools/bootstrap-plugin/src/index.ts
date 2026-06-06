@@ -8,10 +8,23 @@
  *   3. git tag <name>@<version> + push      (cwd: monorepo root)
  *   4. gh release create with CHANGELOG     (cwd: monorepo root)
  *
- * Every step is idempotent: rerunning the script after a partial success
- * skips whatever is already in place, so this is also the safe recovery
- * tool when one job of the publish matrix fails (for any reason — first
- * publish, network flake, etc.) and you want to converge the state by hand
+ * Every step is idempotent. Rerunning the script after a partial success
+ * skips whatever is already in place:
+ *
+ *   - publish: pre-flight `npm view <name>@<version>` short-circuit, AND a
+ *     post-mortem net that recognises the registry's "EPUBLISHCONFLICT"
+ *     error as "already published" so a CDN replication lag (or a brand-new
+ *     package whose first publish landed but whose first trust call failed)
+ *     can re-run without false-failing on step 1.
+ *   - trust:   `pnpm trust:configure` is itself idempotent: it discovers
+ *     every package, reads `npm trust list`, and only POSTs the missing ones.
+ *   - tag:     `git rev-parse refs/tags/<tag>` against local + `git ls-remote
+ *     --tags origin <tag>` against remote.
+ *   - release: `gh release view <tag>` against the GitHub API.
+ *
+ * Net effect: this is also the safe recovery tool when one job of the
+ * publish matrix fails (for any reason — first publish, network flake,
+ * trust-misconfiguration, etc.) and you want to converge the state by hand
  * before clicking "Re-run failed jobs" in Actions.
  *
  * Usage:
@@ -27,9 +40,30 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 const SCOPE_PREFIX = "@reponova/lang-";
+
+/**
+ * Minimum npm CLI version accepted by the bootstrap flow.
+ *
+ * IMPORTANT: this MUST match (or exceed) the minimum required by
+ * `@reponova/trust-configure` — bootstrap calls `pnpm trust:configure --apply`
+ * mid-flow, and we don't want to publish first and only then discover that
+ * the trust step's preflight will reject the npm version. That partial-success
+ * state forces the operator to re-run, hits `EPUBLISHCONFLICT`, and was the
+ * exact failure mode reported in https://github.com/CristianoCiuti/reponova-langs
+ * during the bootstrap of @reponova/lang-json@0.2.0 with npm 11.13.0:
+ * publish succeeded, trust failed because trust-configure requires >= 11.15,
+ * and the second run tried to re-publish over an already-published version.
+ *
+ * 11.15 is the npm release that introduced `--allow-publish` and the
+ * `permissions` field that the registry now mandates for trust payloads
+ * (npm/cli#9248); older clients get back
+ * `400 "permissions is required and must contain at least one valid route"`.
+ */
+const MIN_NPM_MAJOR = 11;
+const MIN_NPM_MINOR = 15;
 
 /**
  * Build the argv for `gh release create`. Pure function so tests can pin
@@ -168,15 +202,72 @@ async function loadPackageJson(
   return { pj, absPackageDir };
 }
 
+/**
+ * Pure-functional core of the npm-version preflight.
+ *
+ * Accepts the raw stdout of `npm --version` (or any string), trims it, and
+ * returns whether the version satisfies `>= minMajor.minMinor.0`. Patch
+ * level is ignored. Anything unparseable returns `{ ok: false }` with the
+ * original (trimmed) input so the caller can surface it in the error
+ * message verbatim.
+ *
+ * Exported for unit tests so we don't have to spawn npm to pin the boundary.
+ */
+export function parseNpmVersion(
+  raw: string,
+  bounds: { readonly minMajor: number; readonly minMinor: number } = {
+    minMajor: MIN_NPM_MAJOR,
+    minMinor: MIN_NPM_MINOR,
+  },
+): { ok: boolean; version: string } {
+  const version = (raw ?? "").trim();
+  if (!version) return { ok: false, version: "<unknown>" };
+  const parts = version.split(".");
+  const maj = Number(parts[0]);
+  const min = Number(parts[1] ?? "0");
+  if (!Number.isFinite(maj)) return { ok: false, version };
+  if (maj > bounds.minMajor) return { ok: true, version };
+  if (maj === bounds.minMajor && Number.isFinite(min) && min >= bounds.minMinor) {
+    return { ok: true, version };
+  }
+  return { ok: false, version };
+}
+
 function checkNpmVersion(): { ok: boolean; version: string } {
   const r = spawnSync("npm", ["--version"], { encoding: "utf8", shell: true });
   if (r.status !== 0) return { ok: false, version: "<unknown>" };
-  const version = r.stdout.trim();
-  const [maj, min] = version.split(".").map((n) => Number(n));
-  if (typeof maj !== "number" || Number.isNaN(maj)) return { ok: false, version };
-  if (maj > 11) return { ok: true, version };
-  if (maj === 11 && (min ?? 0) >= 10) return { ok: true, version };
-  return { ok: false, version };
+  return parseNpmVersion(r.stdout);
+}
+
+/**
+ * Recognises the npm CLI's "you cannot publish over a previously published
+ * version" error from a captured stderr buffer.
+ *
+ * This is the post-mortem idempotency net for `npm publish`: the pre-publish
+ * `npm view <name>@<version>` registry probe is best-effort (the public
+ * registry's CDN can lag a few seconds-to-minutes behind a fresh publish, so
+ * a re-run shortly after a partial-success may genuinely return E404 even
+ * though the version is already there). When publish then fails, we look at
+ * stderr — if it carries any of the canonical "already published" markers,
+ * we treat the publish as a no-op and continue to the trust / tag / release
+ * steps. This is the contract the README has always advertised but the code
+ * was not honouring.
+ *
+ * Patterns matched (verified against npm 11.13/11.16 stderr):
+ *   - "cannot publish over the previously published version(s)" (free text)
+ *   - "EPUBLISHCONFLICT"                                        (npm error code)
+ *   - "code E403" together with "publish over"                  (HTTP status)
+ *
+ * Exported for unit tests so we can pin every variant we've ever seen.
+ */
+export function isAlreadyPublishedError(stderr: string): boolean {
+  if (!stderr) return false;
+  if (/cannot publish over (the )?previously published versions?/i.test(stderr)) {
+    return true;
+  }
+  if (/EPUBLISHCONFLICT/i.test(stderr)) return true;
+  if (/code\s+E403/i.test(stderr) && /publish over/i.test(stderr)) return true;
+  return false;
 }
 
 function checkNpmAuth(): { ok: boolean; user: string } {
@@ -258,6 +349,44 @@ function extractChangelog(
   return null;
 }
 
+/**
+ * Spawns `npm publish --access public` in `cwd`, forwarding stdin and stdout
+ * verbatim (so the user sees the prepublishOnly build, the tarball summary,
+ * and — crucially — the webauth URL that npm prints on the *first* publish)
+ * while teeing stderr both to the parent's stderr (live, for the operator)
+ * AND into a buffer (for post-mortem inspection by `isAlreadyPublishedError`).
+ *
+ * `spawnSync` with `stdio: "inherit"` is the ergonomically simplest choice
+ * but loses the stderr buffer entirely; `stdio: ["inherit","inherit","pipe"]`
+ * delays stderr to the very end which would hide the webauth URL during the
+ * 2FA dance. The async `spawn` + on('data') tee gives both: live UX and a
+ * captured tail.
+ */
+async function runPublish(
+  cwd: string,
+): Promise<{ status: number | null; stderr: string }> {
+  return new Promise((res) => {
+    const child = spawn("npm", ["publish", "--access", "public"], {
+      cwd,
+      shell: true,
+      stdio: ["inherit", "inherit", "pipe"],
+    });
+    let captured = "";
+    child.stderr?.on("data", (chunk: Buffer | string) => {
+      const s = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+      captured += s;
+      process.stderr.write(s);
+    });
+    child.on("close", (status) => {
+      res({ status, stderr: captured });
+    });
+    child.on("error", (err) => {
+      captured += `\n[bootstrap-plugin] spawn error: ${(err as Error).message}\n`;
+      res({ status: null, stderr: captured });
+    });
+  });
+}
+
 async function confirmPrompt(message: string, defaultYes: boolean): Promise<boolean> {
   const { createInterface } = await import("node:readline/promises");
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -309,7 +438,10 @@ async function main(): Promise<void> {
     const v = checkNpmVersion();
     if (!v.ok) {
       console.error(
-        `[bootstrap-plugin] npm >= 11.10.0 required (got ${v.version}). run: npm install -g npm@latest`,
+        `[bootstrap-plugin] npm >= ${MIN_NPM_MAJOR}.${MIN_NPM_MINOR}.0 required (got ${v.version}). run: npm install -g npm@latest`,
+      );
+      console.error(
+        `[bootstrap-plugin] (the trust step requires npm ${MIN_NPM_MAJOR}.${MIN_NPM_MINOR}+; we check up-front so we never publish first and only then discover trust will fail.)`,
       );
       process.exit(1);
     }
@@ -366,16 +498,22 @@ async function main(): Promise<void> {
       console.log(
         `[bootstrap-plugin] $ npm publish --access public  (cwd: ${absPackageDir})`,
       );
-      const r = spawnSync("npm", ["publish", "--access", "public"], {
-        cwd: absPackageDir,
-        stdio: "inherit",
-        shell: true,
-      });
-      if (r.status !== 0) {
+      const r = await runPublish(absPackageDir);
+      if (r.status === 0) {
+        console.log(`[bootstrap-plugin] published ${tag}`);
+      } else if (isAlreadyPublishedError(r.stderr)) {
+        // The pre-flight `npm view` probe missed it (CDN replication delay
+        // or a slightly different stdout shape), but the registry rejected
+        // the upload because the version is already there. From the
+        // bootstrap flow's perspective this is a no-op success: the
+        // artefact we wanted on npm is on npm.
+        console.log(
+          `[bootstrap-plugin] ${tag} is already on the npm registry (post-mortem: EPUBLISHCONFLICT) — treating as already published`,
+        );
+      } else {
         console.error(`[bootstrap-plugin] npm publish failed (exit ${r.status})`);
         process.exit(1);
       }
-      console.log(`[bootstrap-plugin] published ${tag}`);
     }
     console.log("");
   }
