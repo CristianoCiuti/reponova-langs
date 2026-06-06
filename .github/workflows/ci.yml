@@ -39,6 +39,24 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      # Quality gates (sec. 8.10 of INTEGRATION-PLAN.md):
+      # ▸ test:coverage runs vitest --coverage on packages that own a
+      #   real `src/extractor.ts` and enforces ≥80% on every metric for
+      #   that file. Pure-rexport plugins (lang-typescript / lang-tsx /
+      #   lang-javascript) are covered transitively by the
+      #   lang-typescript-core gate and are excluded from the
+      #   workspace-level filter to avoid false negatives.
+      # ▸ size checks every published plugin's `dist/index.js` against
+      #   the 50 KB raw bundle ceiling (excluding bundled WASM grammars,
+      #   which ship in `grammars/` and are fetched at install time).
+      # We pin both gates to a single OS/Node combination to avoid
+      # paying their cost on every matrix cell — coverage thresholds and
+      # size thresholds don't vary across host OS, only build settings
+      # do, and we already have a typecheck/test pass on every cell.
+      - if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        run: pnpm test:coverage
+      - if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        run: pnpm size
 
   # Aggregator: this is the single check that branch protection requires.
   # It marks success only if every matrix job succeeded. Adding or removing

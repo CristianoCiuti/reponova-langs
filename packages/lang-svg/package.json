@@ -29,6 +29,8 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "size": "size-limit",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm run build"
   },
@@ -46,6 +48,15 @@
       ".svg"
     ]
   },
+  "size-limit": [
+    {
+      "name": "dist (raw)",
+      "path": "dist/index.js",
+      "limit": "50 KB",
+      "brotli": false,
+      "gzip": false
+    }
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
