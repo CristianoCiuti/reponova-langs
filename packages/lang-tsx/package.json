@@ -37,6 +37,7 @@
     "build": "tsup",
     "pretest": "pnpm -w grammar-fetch --package=lang-tsx",
     "test": "vitest run",
+    "size": "size-limit",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm run build"
   },
@@ -57,6 +58,15 @@
     ],
     "grammar": "./grammars/tree-sitter-tsx.wasm"
   },
+  "size-limit": [
+    {
+      "name": "dist (raw)",
+      "path": "dist/index.js",
+      "limit": "50 KB",
+      "brotli": false,
+      "gzip": false
+    }
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -19,6 +19,7 @@
     "build": "tsup",
     "pretest": "pnpm -w grammar-fetch --package=lang-typescript",
     "test": "vitest run",
+    "test:coverage": "pnpm -w grammar-fetch --package=lang-typescript && vitest run --coverage",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

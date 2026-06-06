@@ -35,6 +35,8 @@
     "build": "tsup",
     "pretest": "pnpm -w grammar-fetch --package=lang-python",
     "test": "vitest run",
+    "test:coverage": "pnpm -w grammar-fetch --package=lang-python && vitest run --coverage",
+    "size": "size-limit",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm run build"
   },
@@ -55,6 +57,15 @@
     ],
     "grammar": "./grammars/tree-sitter-python.wasm"
   },
+  "size-limit": [
+    {
+      "name": "dist (raw)",
+      "path": "dist/index.js",
+      "limit": "50 KB",
+      "brotli": false,
+      "gzip": false
+    }
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
