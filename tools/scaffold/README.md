@@ -17,11 +17,11 @@ pnpm scaffold lang-rust --ext=.rs --archetype=A --desc="Rust language support"
 pnpm scaffold lang-mermaid --ext=.mmd,.mermaid --archetype=B
 ```
 
-Archetypes (from INTEGRATION-PLAN.md section 9.3):
+Archetypes:
 
-- `A` - programming language (`fileNode.kind = "module"`, typical tree-sitter + outline)
-- `B` - diagram (`fileNode.kind = "diagram"`, typical regex)
-- `C` - visual asset (`fileNode.kind = "diagram"`, regex over text content)
+- `A` - programming language (`fileNode.kind = "module"`, typical tree-sitter + outline). Reference: `@reponova/lang-python`, `@reponova/lang-typescript-core`.
+- `B` - diagram (`fileNode.kind = "diagram"`, typical regex / hand-rolled parser). Reference: `@reponova/lang-plantuml`.
+- `C` - visual asset (`fileNode.kind = "diagram"`, regex over text content). Reference: `@reponova/lang-svg`.
 
 The generated package is created in `packages/lang-<id>/` and is ready to be
 filled in: extractor stub, fixtures placeholders, test scaffolds, README, all

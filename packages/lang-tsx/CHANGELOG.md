@@ -33,7 +33,7 @@
   tags. For pure-TypeScript files this is a no-op (the grammar emits no JSX
   nodes); for TSX it makes the call graph dense and useful.
 
-  Quality gates per `INTEGRATION-PLAN.md` §8.10:
+  Quality gates:
 
   - 34 tests across 6 suites: plugin shape, resolveImportPath, extractor on
     inline TSX scenarios, outline (tree-sitter + regex fallback),

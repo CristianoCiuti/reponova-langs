@@ -1,7 +1,7 @@
 /**
  * Fixture-based tests for @reponova/lang-svg.
  *
- * Tiers (per INTEGRATION-PLAN.md §8.7):
+ * Tiers:
  *  - simple/   : a 3-tier layout with 3 labelled boxes
  *  - medium/   : a richer "Operations Dashboard" mock with gradients,
  *                filters, patterns, and ~10 distinct text labels

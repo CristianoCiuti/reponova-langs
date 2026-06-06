@@ -2,8 +2,14 @@
  * Fixture loading helpers.
  *
  * Convention: each plugin has `tests/fixtures/<level>/<name>.ext` where
- * `<level>` is one of `simple` / `medium` / `complex` (see INTEGRATION-PLAN
- * section 8.7).
+ * `<level>` is one of `simple` / `medium` / `complex`. The three tiers
+ * correspond to:
+ *   - simple   — minimal hand-written examples covering the happy path.
+ *   - medium   — multi-file scenarios that exercise cross-file edges
+ *                (project graphs, workspaces, references).
+ *   - complex  — a real-world snapshot vendored from a well-known
+ *                upstream project, used as a smoke test against
+ *                production-shaped input.
  */
 
 import { readFileSync } from 'node:fs';

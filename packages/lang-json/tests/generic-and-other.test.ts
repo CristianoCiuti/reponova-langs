@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JsonExtractor } from "../src/index.js";
+import { DEFAULT_MAX_GENERIC_KEYS, JsonExtractor } from "../src/index.js";
 
 const ext = new JsonExtractor();
 
@@ -17,12 +17,44 @@ describe("extractor: generic JSON fallback", () => {
     expect(keys).toEqual(["bar", "baz", "description", "foo"]);
   });
 
-  it("caps top-level key extraction to 50 to avoid graph explosion on huge documents", () => {
+  it(`caps top-level key extraction at the default (${DEFAULT_MAX_GENERIC_KEYS}) to avoid graph explosion on data-style documents`, () => {
     const obj: Record<string, number> = {};
-    for (let i = 0; i < 80; i++) obj[`key_${i}`] = i;
+    for (let i = 0; i < DEFAULT_MAX_GENERIC_KEYS + 50; i++) obj[`key_${i}`] = i;
     const r = ext.extract(null, JSON.stringify(obj), "huge.json");
     const keys = r.symbols.filter((s) => s.decorators.includes("json-key"));
-    expect(keys.length).toBe(50);
+    expect(keys.length).toBe(DEFAULT_MAX_GENERIC_KEYS);
+  });
+
+  it("respects a custom maxGenericKeys passed via the constructor", () => {
+    const tighter = new JsonExtractor({ maxGenericKeys: 10 });
+    const obj: Record<string, number> = {};
+    for (let i = 0; i < 25; i++) obj[`key_${i}`] = i;
+    const r = tighter.extract(null, JSON.stringify(obj), "tight.json");
+    const keys = r.symbols.filter((s) => s.decorators.includes("json-key"));
+    expect(keys.length).toBe(10);
+  });
+
+  it("disables the cap when maxGenericKeys is Infinity", () => {
+    const uncapped = new JsonExtractor({ maxGenericKeys: Number.POSITIVE_INFINITY });
+    const obj: Record<string, number> = {};
+    for (let i = 0; i < DEFAULT_MAX_GENERIC_KEYS + 50; i++) obj[`key_${i}`] = i;
+    const r = uncapped.extract(null, JSON.stringify(obj), "no-cap.json");
+    const keys = r.symbols.filter((s) => s.decorators.includes("json-key"));
+    expect(keys.length).toBe(DEFAULT_MAX_GENERIC_KEYS + 50);
+  });
+
+  it("falls back to the default when maxGenericKeys is invalid (negative / NaN)", () => {
+    const negative = new JsonExtractor({ maxGenericKeys: -5 });
+    const nan = new JsonExtractor({ maxGenericKeys: Number.NaN });
+    const obj: Record<string, number> = {};
+    for (let i = 0; i < DEFAULT_MAX_GENERIC_KEYS + 5; i++) obj[`key_${i}`] = i;
+    const src = JSON.stringify(obj);
+    expect(
+      negative.extract(null, src, "n.json").symbols.filter((s) => s.decorators.includes("json-key")).length,
+    ).toBe(DEFAULT_MAX_GENERIC_KEYS);
+    expect(
+      nan.extract(null, src, "n.json").symbols.filter((s) => s.decorators.includes("json-key")).length,
+    ).toBe(DEFAULT_MAX_GENERIC_KEYS);
   });
 
   it("does not crash on an empty document", () => {
