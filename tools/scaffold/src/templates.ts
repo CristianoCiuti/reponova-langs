@@ -183,10 +183,12 @@ function extractorTs(v: Vars): string {
 
 /**
  * TODO: implement the ${v.Id} extractor.
- * See INTEGRATION-PLAN.md section 8 for standards and the existing
- * @reponova/lang-python plugin as a tree-sitter reference (archetype A),
- * @reponova/lang-plantuml for regex archetype B,
- * @reponova/lang-svg for regex archetype C.
+ *
+ * Look at the existing plugins for reference implementations of each
+ * archetype:
+ *   - archetype A (tree-sitter): @reponova/lang-python, @reponova/lang-typescript-core
+ *   - archetype B (regex / hand-rolled parser): @reponova/lang-plantuml
+ *   - archetype C (regex over visual / text content): @reponova/lang-svg
  */
 export class ${v.ClassPrefix}Extractor implements LanguageExtractor {
   readonly languageId = '${v.id}';

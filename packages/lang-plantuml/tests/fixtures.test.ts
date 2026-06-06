@@ -1,7 +1,7 @@
 /**
  * Fixture-based tests for @reponova/lang-plantuml.
  *
- * Tiers (per INTEGRATION-PLAN.md §8.7):
+ * Tiers:
  *  - simple/   : a 4-class diagram with 1 abstract type and 1 note
  *  - medium/   : a sequence diagram with alt branches, activations and notes
  *  - complex/  : 5 hand-authored real-world diagrams (class, sequence,

@@ -1,6 +1,6 @@
 # @reponova/lang-json
 
-Schema-aware JSON / JSONC support for [RepoNova](https://github.com/CristianoCiuti/reponova). Goes well beyond a "treat every key as a node" generic JSON extractor: it recognises the canonical configuration files of the JavaScript / TypeScript ecosystem and surfaces them as first-class graph entities so monorepo dependency graphs, script catalogs and Nx project topologies all show up in the knowledge graph.
+JSON / JSONC support for [RepoNova](https://github.com/CristianoCiuti/reponova). Schema-aware: recognises the canonical configuration files of the JS/TS ecosystem (`package.json`, `tsconfig*`, `nx.json`, `project.json`, `lerna.json`, `turbo.json`) and surfaces them as first-class graph entities. Falls back to a generic top-level-keys-as-symbols extraction for everything else. Backed by Microsoft's [`jsonc-parser`](https://github.com/microsoft/node-jsonc-parser) — no tree-sitter grammar required, JSONC syntax (`//` line comments, `/* … */` block comments, trailing commas) is supported transparently for every file shape.
 
 ## Install
 
@@ -8,54 +8,70 @@ Schema-aware JSON / JSONC support for [RepoNova](https://github.com/CristianoCiu
 reponova lang add @reponova/lang-json
 ```
 
-Then in `reponova.yml`:
+## What it extracts
+
+- **Symbols**:
+  - **`package.json`** — the package's `name` as a `constant` (so `graph_search` against the package name resolves to the file), every `scripts.*` as a `function` (the shell command becomes the docstring), every `bin` entry (string AND map form) as a `function`.
+  - **`tsconfig*.json`** — surfaces structural metadata only via `imports` / file-level tags; no per-key symbol noise.
+  - **`nx.json`** — `targetDefaults.*` as `function` symbols (executor / command in the docstring), `namedInputs.*` as `variable` symbols.
+  - **`project.json`** (Nx) — `targets.*` as `function` symbols (executor / command in docstring), `tags[]` as `variable` symbols (so Nx scope rules like `scope:auth` / `type:lib` become graph facets).
+  - **`turbo.json`** — `pipeline.*` (Turbo 1) AND `tasks.*` (Turbo 2) as `function` symbols.
+  - **Generic JSON / JSONC** (anything that doesn't match a known schema) — top-level keys as `variable` symbols, capped to the configured `maxGenericKeys` (default `200`, see Configuration).
+- **Decorators**: every symbol carries a single decorator describing its provenance — `npm-script`, `npm-bin`, `package-name`, `nx-target`, `nx-target-default`, `nx-named-input`, `nx-tag`, `turbo-task`, `json-key`. This lets downstream queries filter by source schema.
+- **Edges**:
+  - **Imports**: `dependencies` / `devDependencies` / `peerDependencies` / `optionalDependencies` from `package.json` (each carries `<dep>@<spec>` in `names[0]`); tsconfig `extends` (string AND TS 5.0 array form) and `references[].path`; `compilerOptions.paths.<alias>` expanded into one import per target with the alias preserved in `names[0]` (wildcard aliases carry `isWildcard: true`); npm `workspaces` (array form AND `{ packages: [...] }` form), `lerna.json` `packages[]`, and `turbo.json` `extends[]`; Nx `plugins[]` (string AND `{ plugin, options }` forms) and `generators.*`.
+  - **References**: Nx `project.json` `implicitDependencies[]` as `references` edges from the project to each declared dependency.
+- **File docstring**: the package / generic-JSON `description` field, when present.
+- **File-level tags**: `package.json` (always), `private` and `workspaces` (when set on a `package.json`); `tsconfig`, `extends`, `project-references`; `nx`, `monorepo`; `nx-project`, `nx-application` / `nx-library`; `lerna`, `turborepo`; plain `json` for the generic fallback.
+- **File node kind**: `module`.
+
+## Extensions
+
+`.json`, `.jsonc`
+
+The schema kind is detected from the basename (case-insensitive, Windows path separators normalised). Custom-suffix `tsconfig` files (`tsconfig.spec.json`, `tsconfig.lib.json`, `tsconfig.<anything>.json`) are recognised as `tsconfig`.
+
+## Configuration
+
+In `reponova.yml`:
 
 ```yaml
 plugins:
   json:
-    enabled: true
+    enabled: true                # default: true
+    maxGenericKeys: 200          # default: 200 — cap on generic-fallback symbols per file
+    # patterns: []               # override global patterns for JSON files
+    # exclude: []                # override global exclude for JSON files
 ```
 
-## Supported file shapes
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `enabled` | boolean | `true` | Enable/disable JSON file detection and extraction |
+| `maxGenericKeys` | number | `200` | Cap on top-level keys surfaced as `variable` symbols for files that fall into the **generic** fallback (no recognised schema). Stops large data dumps / translation tables / lookup files from creating thousands of nodes. The cap does NOT apply to schema-recognised files (`package.json`, `tsconfig*`, `nx.json`, `project.json`, …) which are already structured. Set to a large number (or `Infinity`) to disable. |
+| `patterns` | string[] | `[]` | Glob patterns to override global file matching for this plugin |
+| `exclude` | string[] | `[]` | Glob patterns to override global exclusions for this plugin |
 
-| File pattern | Schema kind | Surfaces |
-|---|---|---|
-| `package.json` | `package` | `name` constant, `description` as docstring, every `scripts.*` as a function symbol with the command in its docstring, every `bin` entry as a function symbol, every dependency (runtime / dev / peer / optional) as an import edge with version-spec metadata, `workspaces` (array form **and** `{ packages: [...] }` form) as wildcard imports, file-level tags (`private`, `workspaces`). |
-| `tsconfig*.json` (`tsconfig.json`, `tsconfig.base.json`, `tsconfig.spec.json`, …) | `tsconfig` | `extends` (string form **and** TS 5.0 array form) as imports, `references[].path` as imports, `compilerOptions.paths.<alias>` expanded into one import per target with the alias as the import name, file-level tags (`extends`, `project-references`). |
-| `nx.json` | `nx` | `targetDefaults.<name>` as function symbols (executor / command in the docstring), `namedInputs.<name>` as variable symbols, `plugins[]` as imports (string and `{ plugin, options }` forms), `generators.*` as imports. |
-| `project.json` | `project` | Project `name` as the file label, `projectType` as a tag (`nx-application` / `nx-library`), `targets.<name>` as function symbols, `tags[]` as variable symbols (so Nx scope rules like `scope:auth` / `type:lib` become graph facets), `implicitDependencies[]` as graph references. |
-| `lerna.json` | `lerna` | `packages[]` as wildcard workspace imports. |
-| `turbo.json` | `turbo` | `pipeline.*` (Turbo 1) **and** `tasks.*` (Turbo 2) as function symbols, `extends[]` as imports. |
-| any other `.json` / `.jsonc` | `generic` | `description` as docstring (when present) and the top-level keys as variable symbols (capped at 50 to avoid graph explosion). |
+`maxGenericKeys` is also accepted as a constructor option for callers that consume the plugin programmatically:
 
-JSONC syntax — `//` line comments, `/* … */` block comments, trailing commas — is supported transparently for every file type via Microsoft's [`jsonc-parser`](https://github.com/microsoft/node-jsonc-parser) (the same parser used by VS Code and TypeScript's tsconfig loader).
+```ts
+import { JsonExtractor } from "@reponova/lang-json";
 
-## What it extracts
+const ext = new JsonExtractor({ maxGenericKeys: 500 });   // raise the cap
+// or
+const ext = new JsonExtractor({ maxGenericKeys: Infinity }); // disable entirely
+```
 
-- **File-level node kind**: `module`. Every recognised JSON file becomes a `module` graph node — that's how it shows up in `graph_search`, `path_finder` and `node_detail` calls alongside source files.
-- **Symbol kinds**: `function` (npm scripts, npm `bin` entries, Nx `targets`, Nx `targetDefaults`, Turbo tasks), `constant` (the package's name), `variable` (Nx `namedInputs`, Nx `tags`, generic JSON top-level keys).
-- **Imports**: `dependencies` / `devDependencies` / `peerDependencies` / `optionalDependencies` (each carries the version range in `names[0]` as `<dep>@<spec>`), tsconfig `extends` and `references[].path`, `compilerOptions.paths` aliases (the alias is preserved in `names[0]`), workspace globs (`isWildcard: true, isExport: true`), Nx `plugins[]` and `generators.*`, Turbo `extends[]`.
-- **References**: Nx `implicitDependencies[]` as `references` edges from project to project.
+## Resolution semantics
 
-## Path resolution
+- Relative tsconfig-style specs (`extends`, `references[].path`, `paths` aliases) resolve against the importing file's directory: `"./foo.json"` from `apps/web/tsconfig.json` → `apps/web/foo.json`. Path traversal (`../`) and `./` are normalised.
+- The `.json` extension is appended when the spec lacks one: `"../shared/base"` from `apps/web/tsconfig.json` → `apps/shared/base.json`.
+- Directory-style references (`"./libs/core"`) also offer the implicit `libs/core/tsconfig.json` candidate so directory-style references resolve to the directory's tsconfig.
+- Bare specifiers (`react`, `@tsconfig/node20/tsconfig.json`, workspace package names) return `[]` and are treated as external. `node_modules` walks, `package.json` `exports` field rewriting, and workspace alias resolution are deliberately delegated to RepoNova's upstream import resolver — this plugin only handles relative-path semantics.
+- The `bin` field on `package.json` accepts both the single-string form (`"bin": "./cli.js"` — the synthesised symbol takes the package's short name) and the map form (`"bin": { "tool-a": "./a.js", "tool-b": "./b.js" }` — one symbol per entry).
+- The `private` flag on `package.json` is recognised as both the canonical JSON boolean (`"private": true`) and the legacy string form (`"private": "true"`) some hand-edited files use.
+- Comments inside JSON files are NOT preserved as symbol docstrings — only the structured `description` / per-script command body fields are surfaced. Trailing commas and JSONC comments do not break parsing in any file (including `package.json`, although strict tooling like npm itself does not accept them there).
+- The schema-detection step is filename-only: a `package.json` placed at `/data/package.json` is still extracted as a package even if its content is not a real npm manifest. If the content is malformed JSON, the parser tolerates partial recovery and the extractor surfaces whatever it could parse without throwing.
 
-`resolveImportPath()` understands tsconfig-style relative specs:
+## License
 
-- `"./foo.json"` from `apps/web/tsconfig.json` → `apps/web/foo.json`.
-- `"../shared/base"` from `apps/web/tsconfig.json` → `apps/shared/base.json` (the `.json` extension is appended when missing).
-- `"./libs/core"` → also offers the implicit `libs/core/tsconfig.json` candidate so directory-style references resolve to the directory's tsconfig.
-- Bare specifiers (`@tsconfig/node20/tsconfig.json`, `@scope/pkg`) return an empty list — the upstream `node_modules` resolver takes over.
-
-## Limitations
-
-- Comments inside JSON files are intentionally NOT preserved as docstrings. Only `description` fields and per-script command bodies are surfaced.
-- Generic JSON files cap at the first 50 top-level keys per file. Documents larger than that (large seed lists, fixtures, vendored data) will only have their first 50 keys appear as variable symbols.
-- The path resolver does not perform `node_modules` walks or workspace alias resolution. That's the responsibility of RepoNova's upstream import resolver, which receives the unresolved spec and walks accordingly.
-
-## Why a dedicated plugin?
-
-Without a JSON-aware extractor, RepoNova would miss the entire dependency edges of a JS/TS repo: there would be no node connecting your project to `react`, no project-references graph for `tsconfig`-driven monorepos, and no way to ask "which Nx project has the `scope:auth` tag?". This plugin fills that gap with the smallest possible API surface.
-
-## Source
-
-This plugin is developed in the [`reponova-langs`](https://github.com/CristianoCiuti/reponova-langs) monorepo. See `packages/lang-json` for the source and `tests/fixtures/` for the simple / medium / complex fixtures that exercise every schema kind end-to-end.
+MIT — see [LICENSE](./LICENSE).

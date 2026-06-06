@@ -9,12 +9,12 @@ import { defineConfig, type UserConfig } from 'vitest/config';
  * `--coverage` (or `pnpm test:coverage`), so day-to-day `pnpm test`
  * stays fast.
  *
- * Coverage policy (sec. 8.10 of INTEGRATION-PLAN.md):
+ * Coverage policy:
  *
  *   ▸ Hard gate at 80% on `src/extractor.ts` for every metric (lines,
  *     branches, functions, statements). This is the canonical
  *     "value-producing" file in every plugin (regex- or tree-sitter-based
- *     parsing logic) and the one the plan singles out verbatim.
+ *     parsing logic) and the one the gate singles out.
  *
  *   ▸ NO global gate (yet). Some plugins ship an `outline.ts` whose
  *     coverage is currently far below 80% because the existing test

@@ -1,11 +1,12 @@
 /**
- * Fixture-based tests covering the simple / medium / complex tiers laid out in
- * INTEGRATION-PLAN.md section 8.7. These complement the inline-source tests in
- * `extractor.test.ts` and use real Python files on disk so that we can rely
- * on the same grammar + extractor combination that consumers will hit.
+ * Fixture-based tests covering the simple / medium / complex tiers.
  *
- * The complex/ tier is a verbatim snapshot of `pallets/click` 8.4.1 — see
- * `tests/fixtures/complex/click-8.4.1/ATTRIBUTION.md` for provenance.
+ * These complement the inline-source tests in `extractor.test.ts` and
+ * use real Python files on disk so that we can rely on the same grammar
+ * + extractor combination that consumers will hit.
+ *
+ * The complex/ tier is a verbatim snapshot of `pallets/click` 8.4.1 —
+ * see `tests/fixtures/complex/click-8.4.1/ATTRIBUTION.md` for provenance.
  */
 
 import { describe, it, expect } from "vitest";

@@ -1,7 +1,7 @@
 /**
  * Fixture-based tests for @reponova/lang-json.
  *
- * Tiers (per INTEGRATION-PLAN.md §8.7):
+ * Tiers:
  *  - simple/   : an isolated package.json + sibling tsconfig.json.
  *  - medium/   : a 2-tier workspace (root + packages/core + apps/web)
  *                with a tsconfig.base.json + project references graph

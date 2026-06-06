@@ -33,6 +33,38 @@ import { type Node as JsoncNode, parseTree } from "jsonc-parser";
 
 const JSON_EXTENSIONS = [".json", ".jsonc"] as const;
 
+/**
+ * Default cap on the number of top-level keys surfaced as `variable`
+ * symbols when a JSON file does NOT match a known schema (`package.json`,
+ * `tsconfig*`, `nx.json`, `project.json`, `lerna.json`, `turbo.json`).
+ *
+ * The cap exists to prevent graph bloat on JSON files that are actually
+ * **data** rather than configuration — translation tables, lookup
+ * dumps, large vendored fixtures, etc. Without it, an `i18n.json` with
+ * a few thousand keys would create a few thousand graph nodes that add
+ * no analytical value.
+ *
+ * 200 is sized to comfortably contain the largest hand-written config
+ * files we've seen in real codebases (heavily-customised
+ * `eslint.config.json`, full `firebase.json` with dozens of resources,
+ * top-level monorepo manifests). Files that legitimately need more can
+ * be unblocked by instantiating the extractor manually:
+ *
+ *     new JsonExtractor({ maxGenericKeys: 500 })
+ */
+export const DEFAULT_MAX_GENERIC_KEYS = 200;
+
+/** Construction-time options for {@link JsonExtractor}. */
+export interface JsonExtractorOptions {
+  /**
+   * Override the cap on generic top-level-key extraction. Only applies
+   * to files that fall into the `generic` schema kind — schemas like
+   * `package.json` already structure their output so the cap has no
+   * effect there. Set to `Infinity` to disable the cap.
+   */
+  maxGenericKeys?: number;
+}
+
 /** What kind of well-known JSON file we are looking at, by filename. */
 export type JsonKind =
   | "package"
@@ -617,7 +649,11 @@ function extractTurbo(root: JsoncNode | undefined, ctx: ExtractCtx): FileNodeDec
 
 /* ────────────────────────────  generic JSON  ───────────────────────── */
 
-function extractGeneric(root: JsoncNode | undefined, ctx: ExtractCtx): FileNodeDeclaration {
+function extractGeneric(
+  root: JsoncNode | undefined,
+  ctx: ExtractCtx,
+  maxGenericKeys: number,
+): FileNodeDeclaration {
   const description = asStringValue(findProperty(root, "description"));
   const fileNode: FileNodeDeclaration = {
     kind: "module",
@@ -627,10 +663,13 @@ function extractGeneric(root: JsoncNode | undefined, ctx: ExtractCtx): FileNodeD
   };
 
   // Top-level keys at most as a hint of structure, capped to avoid
-  // explosion on huge documents (seed lists, fixtures, …).
+  // explosion on data-style documents (translation tables, lookup
+  // dumps, vendored fixtures). The cap is configurable via the
+  // {@link JsonExtractorOptions.maxGenericKeys} constructor option;
+  // see {@link DEFAULT_MAX_GENERIC_KEYS} for rationale.
   if (root?.type === "object") {
     const taken = new Map<string, number>();
-    let cap = 50;
+    let cap = maxGenericKeys;
     for (const { key, value, keyOffset } of asObjectEntries(root)) {
       if (cap-- <= 0) break;
       const safe = sanitiseSymbol(key);
@@ -656,6 +695,14 @@ export class JsonExtractor implements LanguageExtractor {
   readonly languageId = "json";
   readonly extensions = [...JSON_EXTENSIONS];
   readonly wasmFile = undefined;
+
+  private readonly maxGenericKeys: number;
+
+  constructor(options: JsonExtractorOptions = {}) {
+    const v = options.maxGenericKeys;
+    this.maxGenericKeys =
+      typeof v === "number" && v >= 0 ? v : DEFAULT_MAX_GENERIC_KEYS;
+  }
 
   extract(_tree: SyntaxTree | null, sourceCode: string, filePath: string): FileExtraction {
     const root = parseTree(sourceCode);
@@ -692,7 +739,7 @@ export class JsonExtractor implements LanguageExtractor {
         fileNode = extractTurbo(root, ctx);
         break;
       default:
-        fileNode = extractGeneric(root, ctx);
+        fileNode = extractGeneric(root, ctx, this.maxGenericKeys);
     }
 
     return {
