@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "../../dist/out-tsc",
+    "rootDir": "src",
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "dom"]
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../../libs/auth" },
+    { "path": "../../libs/billing" }
+  ]
+}

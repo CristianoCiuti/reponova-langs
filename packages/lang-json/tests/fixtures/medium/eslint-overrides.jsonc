@@ -1,0 +1,10 @@
+{
+  // JSONC fixture: exercises the JSONC parser through line + block
+  // comments and a trailing comma.
+  "rules": {
+    /* relax during the migration */
+    "no-unused-vars": "warn",
+    "@typescript-eslint/explicit-any": "off",
+  },
+  "ignorePatterns": ["dist", "node_modules"]
+}

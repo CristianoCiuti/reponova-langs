@@ -66,6 +66,19 @@ importers:
         specifier: ^0.25.10
         version: 0.25.10
 
+  packages/lang-json:
+    dependencies:
+      jsonc-parser:
+        specifier: ^3.3.1
+        version: 3.3.1
+    devDependencies:
+      '@reponova/lang-test-utils':
+        specifier: workspace:*
+        version: link:../lang-test-utils
+      reponova:
+        specifier: ^0.4.3
+        version: 0.4.3(apache-arrow@18.1.0)(typescript@5.9.3)
+
   packages/lang-plantuml:
     devDependencies:
       '@reponova/lang-test-utils':

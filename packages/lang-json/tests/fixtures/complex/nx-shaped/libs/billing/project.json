@@ -1,0 +1,29 @@
+{
+  "name": "billing",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/billing/src",
+  "tags": ["scope:billing", "type:lib"],
+  "implicitDependencies": ["auth"],
+  "targets": {
+    "build": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/billing",
+        "main": "libs/billing/src/index.ts",
+        "tsConfig": "libs/billing/tsconfig.lib.json"
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test"
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "publish": {
+      "command": "node tools/scripts/publish.mjs billing {args.ver} {args.tag}",
+      "dependsOn": ["build"]
+    }
+  }
+}

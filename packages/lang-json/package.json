@@ -1,0 +1,75 @@
+{
+  "name": "@reponova/lang-json",
+  "version": "0.1.0",
+  "description": "JSON / JSONC support for RepoNova with schema-aware extraction (package.json, tsconfig*, nx.json, project.json)",
+  "keywords": [
+    "reponova",
+    "reponova-plugin",
+    "language-plugin",
+    "json",
+    "jsonc",
+    "package.json",
+    "tsconfig",
+    "nx",
+    "monorepo",
+    "schema-aware",
+    "knowledge-graph",
+    "static-analysis",
+    "outline",
+    "symbol-extraction"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "size": "size-limit",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "peerDependencies": {
+    "reponova": "^0.4.0"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
+  },
+  "devDependencies": {
+    "@reponova/lang-test-utils": "workspace:*",
+    "reponova": "^0.4.3"
+  },
+  "reponova": {
+    "type": "language",
+    "id": "json",
+    "extensions": [
+      ".json",
+      ".jsonc"
+    ]
+  },
+  "size-limit": [
+    {
+      "name": "dist (raw)",
+      "path": "dist/index.js",
+      "limit": "50 KB",
+      "brotli": false,
+      "gzip": false
+    }
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CristianoCiuti/reponova-langs.git",
+    "directory": "packages/lang-json"
+  },
+  "homepage": "https://github.com/CristianoCiuti/reponova-langs/tree/main/packages/lang-json"
+}

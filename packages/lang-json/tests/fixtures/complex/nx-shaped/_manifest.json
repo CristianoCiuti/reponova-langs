@@ -1,0 +1,29 @@
+{
+  "fixture": "nx-shaped",
+  "kind": "synthetic",
+  "shape_inspired_by": {
+    "project": "nrwl/nx",
+    "url": "https://github.com/nrwl/nx",
+    "version_modeled": "21.x",
+    "license_upstream": "MIT"
+  },
+  "rationale": "The fixture exercises the lang-json schema-aware extractor against the canonical Nx workspace shape (nx.json + project.json + tsconfig graph + workspace package.json). Files are SYNTHETIC — no source is copied from nrwl/nx — so we ship them under our own MIT licence with no upstream attribution required. They mirror Nx's documented shape for nx.json (targetDefaults, plugins, namedInputs, generators, release), project.json (targets, implicitDependencies, tags, projectType, sourceRoot), and the standard tsconfig project-references graph used by Nx ts/lib generators.",
+  "files": [
+    "package.json",
+    "nx.json",
+    "tsconfig.json",
+    "tsconfig.base.json",
+    "libs/auth/project.json",
+    "libs/auth/tsconfig.json",
+    "libs/billing/project.json",
+    "libs/billing/tsconfig.json",
+    "apps/web/project.json",
+    "apps/web/tsconfig.json"
+  ],
+  "expected_invariants": {
+    "min_total_symbols": 25,
+    "min_total_imports": 30,
+    "min_total_references": 3,
+    "files_with_module_node": 10
+  }
+}
