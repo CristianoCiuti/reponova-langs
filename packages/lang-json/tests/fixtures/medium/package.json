@@ -1,0 +1,25 @@
+{
+  "name": "monorepo-root",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Monorepo workspace root with two packages and shared tooling.",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/web"
+  ],
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.4.0"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  }
+}

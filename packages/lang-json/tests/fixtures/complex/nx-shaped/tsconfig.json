@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "references": [
+    { "path": "./libs/auth" },
+    { "path": "./libs/billing" },
+    { "path": "./apps/web" }
+  ]
+}

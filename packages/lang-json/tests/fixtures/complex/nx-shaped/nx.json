@@ -1,0 +1,60 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "production": [
+      "default",
+      "!{projectRoot}/**/*.spec.ts",
+      "!{projectRoot}/tsconfig.spec.json"
+    ],
+    "sharedGlobals": []
+  },
+  "targetDefaults": {
+    "build": {
+      "executor": "@nx/esbuild:esbuild",
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "cache": true
+    },
+    "@nx/jest:jest": {
+      "cache": true,
+      "inputs": ["default", "^production"]
+    }
+  },
+  "plugins": [
+    "@nx/esbuild/plugin",
+    {
+      "plugin": "@nx/eslint/plugin",
+      "options": { "targetName": "lint" }
+    },
+    {
+      "plugin": "@nx/vite/plugin",
+      "options": {
+        "buildTargetName": "build",
+        "testTargetName": "test"
+      }
+    }
+  ],
+  "generators": {
+    "@nx/react": {
+      "library": { "style": "css", "linter": "eslint" }
+    },
+    "@nx/js:library": {
+      "buildable": true
+    }
+  },
+  "release": {
+    "projects": ["libs/*"],
+    "version": {
+      "preVersionCommand": "pnpm dlx nx run-many -t build"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "auth",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/auth/src",
+  "tags": ["scope:auth", "type:lib"],
+  "implicitDependencies": [],
+  "targets": {
+    "build": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/auth",
+        "main": "libs/auth/src/index.ts",
+        "tsConfig": "libs/auth/tsconfig.lib.json",
+        "format": ["esm"],
+        "platform": "node"
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": ["{workspaceRoot}/coverage/libs/auth"]
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  // Solution-style root tsconfig: declares project references, no files
+  // are compiled directly here.
+  "extends": "./tsconfig.base.json",
+  "files": [],
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./apps/web" }
+  ]
+}

@@ -8,16 +8,22 @@ Each plugin extends RepoNova's knowledge graph with support for a specific langu
 
 | Package | Description | Status |
 |---|---|---|
-| [`@reponova/lang-typescript`](./packages/lang-typescript) | TypeScript (`.ts` / `.mts` / `.cts`, tree-sitter) | Published |
 | [`@reponova/lang-python`](./packages/lang-python) | Python (`.py` / `.pyw`, tree-sitter) | Published |
+| [`@reponova/lang-javascript`](./packages/lang-javascript) | JavaScript (`.js` / `.mjs` / `.cjs` / `.jsx`, tree-sitter) | Published |
+| [`@reponova/lang-typescript`](./packages/lang-typescript) | TypeScript (`.ts` / `.mts` / `.cts`, tree-sitter) | Published |
+| [`@reponova/lang-tsx`](./packages/lang-tsx) | TSX / React (`.tsx`, tree-sitter) | Published |
+| [`@reponova/lang-json`](./packages/lang-json) | JSON / JSONC with schema-aware extraction for `package.json`, `tsconfig*`, `nx.json`, `project.json`, `lerna.json`, `turbo.json` (jsonc-parser) | Published |
 | [`@reponova/lang-plantuml`](./packages/lang-plantuml) | PlantUML diagrams (`.puml` / `.plantuml`, regex) | Published |
 | [`@reponova/lang-svg`](./packages/lang-svg) | SVG assets (`.svg`, regex) | Published |
 
 ## Install a plugin in your RepoNova project
 
 ```bash
-reponova lang add @reponova/lang-typescript
 reponova lang add @reponova/lang-python
+reponova lang add @reponova/lang-javascript
+reponova lang add @reponova/lang-typescript
+reponova lang add @reponova/lang-tsx
+reponova lang add @reponova/lang-json
 reponova lang add @reponova/lang-plantuml
 reponova lang add @reponova/lang-svg
 ```
