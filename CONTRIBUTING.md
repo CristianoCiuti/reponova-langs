@@ -19,6 +19,41 @@ pnpm test
 
 The `prebuild` and `pretest` hooks of plugins that ship a tree-sitter grammar (e.g. `lang-typescript`, `lang-python`) call `grammar-fetch` automatically, so a fresh `pnpm build` or `pnpm test` from a clean clone works without an explicit fetch step.
 
+## Working against an unpublished `reponova` (cross-repo dev link)
+
+Plugins depend on the *published* `reponova` npm package. While developing a change that spans both `reponova` and one or more `@reponova/lang-*` plugins (e.g. a host-side API rename plus the plugins updating their call sites), you need this workspace's build and type-check to see the unreleased host code from your local `reponova` checkout.
+
+The pair of scripts below makes that transparent and reversible:
+
+```bash
+pnpm dev:link-reponova                       # default: ../reponova
+REPONOVA_PATH=/path pnpm dev:link-reponova   # explicit path
+```
+
+What it does:
+
+1. `npm pack` of the sibling `reponova` checkout → tarball under `.dev/` (gitignored).
+2. Writes `pnpm.overrides.reponova: file:./.dev/reponova-x.y.z.tgz` into the root `package.json`.
+3. `pnpm install --no-frozen-lockfile` to apply the override.
+
+**Both edits — `package.json` and `pnpm-lock.yaml` — are intentionally local and MUST NOT be committed.** When you're done:
+
+```bash
+pnpm dev:unlink-reponova
+```
+
+This reverts `package.json` and `pnpm-lock.yaml` via `git checkout`, deletes `.dev/`, and runs `pnpm install --frozen-lockfile` to restore the published-version setup.
+
+Transitional caveat — pre-publish window: while a feature is in flight, the plugins' `peerDependencies.reponova` (and the matching `devDependencies.reponova`) may declare a range that doesn't yet exist on npm (e.g. `^0.5.0` while the published version is still `0.4.3`). The committed `pnpm-lock.yaml` then necessarily lags behind. `dev:unlink-reponova` detects this case and exits cleanly with a friendly note; the working tree is restored and safe to commit, and `pnpm install` will re-resolve the lockfile automatically once the upstream release ships.
+
+Safety nets (three layers, defense-in-depth):
+
+1. **Pre-commit hook (automatic).** The committed `.githooks/pre-commit` runs `pnpm check:no-dev-link` whenever a commit touches `package.json` or `pnpm-lock.yaml`. It's wired in by `scripts/install-githooks.mjs`, which the `prepare` npm script runs on every `pnpm install` — so a fresh clone is protected after the very first install with zero extra steps. The hook is a no-op for commits that don't touch those files. Emergency bypass: `git commit --no-verify` (but please don't — and never push the result without a second look).
+2. **Release guard.** `prerelease` runs the same check, so `pnpm release` fails fast if the override leaked through. CI never publishes a tarball built against your local sibling checkout.
+3. **On-demand check.** `pnpm check:no-dev-link` is also exposed as a regular script (~50 ms), useful in custom CI steps or if you want to call it manually.
+
+`prebuild`/`pretest` intentionally do NOT run the guard: blocking those during dev would defeat the point of the link in the first place.
+
 ## Repository layout
 
 ```

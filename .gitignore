@@ -9,6 +9,12 @@ coverage/
 .turbo/
 *.tsbuildinfo
 
+# Local-only tarball produced by `pnpm dev:link-reponova` (cross-repo dev link
+# to the sibling `reponova` checkout). The override referencing this directory
+# lives in `package.json.pnpm.overrides` and is ALSO developer-local — see
+# scripts/check-no-dev-link.mjs which fails the build if either side leaks.
+.dev/
+
 # Grammar .wasm files are downloaded by tools/grammar-fetcher at build time.
 # They are NOT committed to git but ARE included in the published npm tarball.
 # The single source of truth for versions + SHA-256 is tools/grammar-fetcher/grammars.json.
