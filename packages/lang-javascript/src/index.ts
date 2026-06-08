@@ -60,7 +60,6 @@ const JS_INDEX_CANDIDATES = [
 
 export const plugin: LanguagePlugin = {
   id: "javascript",
-  extensions: [...JS_EXTENSIONS],
   fileType: "javascript",
   grammarPath,
   extractor: new TypescriptExtractor({

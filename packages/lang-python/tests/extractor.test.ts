@@ -1,14 +1,36 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { plugin, PythonExtractor } from "../src/index.js";
 import { python as pythonOutline } from "../src/outline.js";
+
+/**
+ * Read `package.json.reponova.extensions` — the single source of truth for
+ * what file extensions this plugin claims to handle. Tests pin the manifest
+ * directly rather than the runtime export, mirroring how the production
+ * loader reads them.
+ */
+function readManifestExtensions(): string[] {
+  const pkgJsonPath = resolve(
+    fileURLToPath(new URL(".", import.meta.url)),
+    "..",
+    "package.json",
+  );
+  const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
+  return pkg.reponova?.extensions ?? [];
+}
 
 describe("@reponova/lang-python plugin", () => {
   it("exports a valid LanguagePlugin", () => {
     expect(plugin.id).toBe("python");
-    expect(plugin.extensions).toEqual([".py", ".pyw"]);
     expect(plugin.grammarPath).toBeDefined();
     expect(plugin.extractor).toBeInstanceOf(PythonExtractor);
     expect(plugin.outline).toBeDefined();
+  });
+
+  it("declares extensions in its manifest (authoritative source)", () => {
+    expect(readManifestExtensions()).toEqual([".py", ".pyw"]);
   });
 
   it("extractor has correct metadata", () => {

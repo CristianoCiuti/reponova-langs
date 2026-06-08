@@ -13,7 +13,6 @@ const grammarPath = resolve(fileURLToPath(new URL(".", import.meta.url)), "../gr
 
 export const plugin: LanguagePlugin = {
   id: "python",
-  extensions: [".py", ".pyw"],
   fileType: "python",
   grammarPath,
   extractor: new PythonExtractor(),

@@ -8,17 +8,32 @@
  * — is exercised by the test suite in `@reponova/lang-typescript-core`.
  */
 import { describe, it, expect } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { plugin, TypescriptExtractor } from "../src/index.js";
+
+function readManifestExtensions(): string[] {
+  const pkgJsonPath = resolve(
+    fileURLToPath(new URL(".", import.meta.url)),
+    "..",
+    "package.json",
+  );
+  const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
+  return pkg.reponova?.extensions ?? [];
+}
 
 describe("@reponova/lang-tsx plugin shape", () => {
   it("exposes the expected plugin manifest", () => {
     expect(plugin.id).toBe("tsx");
-    expect(plugin.extensions).toEqual([".tsx"]);
     expect(plugin.fileType).toBe("tsx");
     expect(plugin.grammarPath).toBeDefined();
     expect(plugin.extractor).toBeInstanceOf(TypescriptExtractor);
     expect(plugin.outline).toBeDefined();
+  });
+
+  it("declares extensions in its manifest (authoritative source)", () => {
+    expect(readManifestExtensions()).toEqual([".tsx"]);
   });
 
   it("ships the tsx wasm grammar in the package", () => {

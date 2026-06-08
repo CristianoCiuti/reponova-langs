@@ -22,7 +22,6 @@ const grammarPath = resolve(
 
 export const plugin: LanguagePlugin = {
   id: "typescript",
-  extensions: [".ts", ".mts", ".cts"],
   fileType: "typescript",
   grammarPath,
   extractor: new TypescriptExtractor(),

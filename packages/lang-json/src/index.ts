@@ -18,7 +18,6 @@ import {
 
 export const plugin: LanguagePlugin = {
   id: "json",
-  extensions: [".json", ".jsonc"],
   fileType: "json",
   configDefaults: { maxGenericKeys: DEFAULT_MAX_GENERIC_KEYS },
   extractor: new JsonExtractor(),

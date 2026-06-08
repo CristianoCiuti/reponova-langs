@@ -4,8 +4,7 @@
   "description": "JSON / JSONC support for RepoNova with schema-aware extraction (package.json, tsconfig*, nx.json, project.json)",
   "keywords": [
     "reponova",
-    "reponova-plugin",
-    "language-plugin",
+    "reponova-language",
     "json",
     "jsonc",
     "package.json",
@@ -39,14 +38,14 @@
     "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
-    "reponova": "^0.4.0"
+    "reponova": "^0.6.0"
   },
   "dependencies": {
     "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
     "@reponova/lang-test-utils": "workspace:*",
-    "reponova": "^0.4.3"
+    "reponova": "^0.6.0"
   },
   "reponova": {
     "type": "language",

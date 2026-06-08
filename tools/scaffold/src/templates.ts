@@ -70,12 +70,17 @@ function packageJson(v: Vars): string {
   const wasmDep = v.isTreeSitter
     ? ',\n    "web-tree-sitter": "^0.25.10"'
     : '';
+  // `keywords: ["reponova-language"]` is REQUIRED for `reponova lang suggest`
+  // to discover the package on the npm registry. `reponova.extensions` is the
+  // authoritative source of truth for file extensions (read by the plugin
+  // loader and by the registry client).
   return (
     JSON.stringify(
       JSON.parse(`{
   "name": "@reponova/lang-${v.id}",
   "version": "0.0.0",
   "description": "${v.description}",
+  "keywords": ["reponova-language"],
   "type": "module",
   "exports": { ".": "./dist/index.js" },
   "files": ${filesField},
@@ -87,11 +92,11 @@ function packageJson(v: Vars): string {
     "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
-    "reponova": "^0.4.0"
+    "reponova": "^0.5.0"
   },
   "devDependencies": {
     "@reponova/lang-test-utils": "workspace:*",
-    "reponova": "^0.4.3"${wasmDep}
+    "reponova": "^0.5.0"${wasmDep}
   },
   "reponova": {
     "type": "language",
@@ -161,7 +166,6 @@ import { ${v.ClassPrefix}Extractor } from './extractor.js';
 
 ${grammarBlock}export const plugin: LanguagePlugin = {
   id: '${v.id}',
-  extensions: ${v.extensionsArray},
   fileType: '${v.id}',${grammarPathField}
   extractor: new ${v.ClassPrefix}Extractor(),
 };
@@ -191,8 +195,7 @@ function extractorTs(v: Vars): string {
  *   - archetype C (regex over visual / text content): @reponova/lang-svg
  */
 export class ${v.ClassPrefix}Extractor implements LanguageExtractor {
-  readonly languageId = '${v.id}';
-  readonly extensions = ${v.extensionsArray};${wasmField}
+  readonly languageId = '${v.id}';${wasmField}
 
   extract(
     _tree: SyntaxTree | null,

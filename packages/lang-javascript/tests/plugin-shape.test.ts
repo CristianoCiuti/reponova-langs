@@ -10,17 +10,32 @@
  * `extractor.test.ts`.
  */
 import { describe, it, expect } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { plugin, TypescriptExtractor } from "../src/index.js";
+
+function readManifestExtensions(): string[] {
+  const pkgJsonPath = resolve(
+    fileURLToPath(new URL(".", import.meta.url)),
+    "..",
+    "package.json",
+  );
+  const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
+  return pkg.reponova?.extensions ?? [];
+}
 
 describe("@reponova/lang-javascript plugin shape", () => {
   it("exposes the expected plugin manifest", () => {
     expect(plugin.id).toBe("javascript");
-    expect(plugin.extensions).toEqual([".js", ".mjs", ".cjs", ".jsx"]);
     expect(plugin.fileType).toBe("javascript");
     expect(plugin.grammarPath).toBeDefined();
     expect(plugin.extractor).toBeInstanceOf(TypescriptExtractor);
     expect(plugin.outline).toBeDefined();
+  });
+
+  it("declares extensions in its manifest (authoritative source)", () => {
+    expect(readManifestExtensions()).toEqual([".js", ".mjs", ".cjs", ".jsx"]);
   });
 
   it("ships the JavaScript wasm grammar in the package", () => {
