@@ -1,0 +1,68 @@
+#!/bin/sh
+# reponova-langs pre-commit hook
+#
+# Auto-installed by `scripts/install-githooks.mjs` (run from the `prepare`
+# npm script). To bypass on a one-off basis use `git commit --no-verify`,
+# but please don't — see CONTRIBUTING.md "Working against an unpublished
+# reponova" for what this guard is preventing.
+#
+# Currently enforces:
+#   • no leftover `pnpm dev:link-reponova` state can be committed
+#     (cross-repo dev link to a sibling `reponova` checkout).
+#
+# Implementation note
+# -------------------
+# The check is implemented in pure POSIX sh + `grep` + filesystem tests on
+# purpose: GUI commit dialogs (Cursor, VS Code, GitHub Desktop, …) run
+# `git commit` with a minimal system PATH that does NOT include node/pnpm,
+# especially on Windows where they live behind FNM/NVM shims loaded by the
+# user's shell profile. Calling `node` or `pnpm` from here would crash with
+# "command not found" and abort every commit.
+#
+# `scripts/check-no-dev-link.mjs` (the Node version) is kept for
+# `prerelease` and `pnpm check:no-dev-link`, both of which always run with
+# a full toolchain available.
+
+set -e
+
+# Only fail if package.json or pnpm-lock.yaml are about to change — for
+# unrelated commits (e.g. docs-only) we skip the check entirely so the
+# hook stays out of the developer's way.
+changed=$(git diff --cached --name-only -- package.json pnpm-lock.yaml || true)
+if [ -z "$changed" ]; then
+  exit 0
+fi
+
+ROOT=$(git rev-parse --show-toplevel)
+PKG="$ROOT/package.json"
+DEV_DIR="$ROOT/.dev"
+
+failures=""
+
+# ─── Check 1: .dev/ tarball directory ───────────────────────────────────────
+# Created exclusively by `pnpm dev:link-reponova` to host the local sibling
+# tarball; gitignored, so its presence is unambiguous evidence of an active
+# link.
+if [ -d "$DEV_DIR" ]; then
+  failures="${failures}
+  - .dev/ directory exists (created by dev:link-reponova)."
+fi
+
+# ─── Check 2: pnpm override pointing reponova at a local file: path ─────────
+# Match any  "reponova": "file:..."  entry in the root package.json. In a
+# clean workspace `reponova` is always a semver dependency (e.g. ^0.5.0),
+# never a file: spec, so a hit can only mean a leftover dev-link override.
+# This pattern is robust to whitespace and to whichever exact tarball
+# filename the link script chose.
+if [ -f "$PKG" ] && grep -E '"reponova"[[:space:]]*:[[:space:]]*"file:' "$PKG" >/dev/null 2>&1; then
+  line=$(grep -E '"reponova"[[:space:]]*:[[:space:]]*"file:' "$PKG" | head -n 1 | sed 's/^[[:space:]]*//; s/,[[:space:]]*$//')
+  failures="${failures}
+  - package.json declares a dev-link override: ${line}"
+fi
+
+if [ -n "$failures" ]; then
+  printf '%s\n' "[pre-commit] dev-link state detected - refusing to proceed:" >&2
+  printf '%s\n' "$failures" >&2
+  printf '%s\n' "[pre-commit] run \`pnpm dev:unlink-reponova\` to revert." >&2
+  exit 1
+fi

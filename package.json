@@ -9,6 +9,7 @@
   },
   "packageManager": "pnpm@9.15.9",
   "scripts": {
+    "prepare": "node scripts/install-githooks.mjs",
     "build": "pnpm -r --filter \"./packages/*\" build",
     "test": "pnpm -r --filter \"./packages/*\" --filter \"./tools/bootstrap-plugin\" --filter \"./tools/trust-configure\" test",
     "test:coverage": "pnpm --filter \"@reponova/lang-python\" --filter \"@reponova/lang-plantuml\" --filter \"@reponova/lang-svg\" --filter \"@reponova/lang-json\" --filter \"@reponova/lang-typescript-core\" test:coverage",
@@ -21,10 +22,14 @@
     "grammar-check": "pnpm --filter @reponova/grammar-fetcher start -- --check",
     "trust:configure": "pnpm --filter @reponova/trust-configure start --",
     "bootstrap-plugin": "pnpm --filter @reponova/bootstrap-plugin start --",
+    "dev:link-reponova": "node scripts/dev-link-reponova.mjs",
+    "dev:unlink-reponova": "node scripts/dev-unlink-reponova.mjs",
+    "check:no-dev-link": "node scripts/check-no-dev-link.mjs",
     "changeset": "changeset",
     "version-packages": "changeset version",
+    "prerelease": "node scripts/check-no-dev-link.mjs",
     "release": "pnpm grammar-fetch && pnpm build && pnpm test && changeset publish",
-    "clean": "pnpm -r exec rimraf dist node_modules && rimraf node_modules"
+    "clean": "pnpm -r exec rimraf dist node_modules && rimraf node_modules .dev"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.9",
