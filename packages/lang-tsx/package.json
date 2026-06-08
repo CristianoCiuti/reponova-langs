@@ -1,6 +1,6 @@
 {
   "name": "@reponova/lang-tsx",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "TSX (TypeScript + JSX) language support for RepoNova",
   "keywords": [
     "reponova",

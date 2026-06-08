@@ -1,5 +1,22 @@
 # @reponova/lang-python
 
+## 0.4.0
+
+### Minor Changes
+
+- e6c20e7: Align official plugins with reponova v0.6 manifest spec.
+
+  - `package.json.keywords` switches to the single canonical token
+    `reponova-language` (the legacy `reponova-plugin` / `language-plugin`
+    keywords are removed). This is the only keyword now consulted by
+    `reponova lang suggest` on the npm registry.
+  - `package.json.reponova.extensions[]` is now the single source of truth
+    for file extensions. The previously-duplicated `extensions` field on the
+    exported `LanguagePlugin` object has been removed — the loader reads
+    extensions from the manifest exclusively.
+  - `peerDependencies.reponova` bumped to `^0.6.0` (the host release that
+    introduced the new manifest validation).
+
 ## 0.3.0
 
 ### Minor Changes

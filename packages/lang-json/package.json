@@ -1,6 +1,6 @@
 {
   "name": "@reponova/lang-json",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "JSON / JSONC support for RepoNova with schema-aware extraction (package.json, tsconfig*, nx.json, project.json)",
   "keywords": [
     "reponova",
