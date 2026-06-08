@@ -4,7 +4,7 @@
 
 ### Minor Changes
 
-- e6c20e7: Align official plugins with reponova v0.5 manifest spec.
+- e6c20e7: Align official plugins with reponova v0.6 manifest spec.
 
   - `package.json.keywords` switches to the single canonical token
     `reponova-language` (the legacy `reponova-plugin` / `language-plugin`
@@ -14,7 +14,7 @@
     for file extensions. The previously-duplicated `extensions` field on the
     exported `LanguagePlugin` object has been removed — the loader reads
     extensions from the manifest exclusively.
-  - `peerDependencies.reponova` bumped to `^0.5.0` (the host release that
+  - `peerDependencies.reponova` bumped to `^0.6.0` (the host release that
     introduced the new manifest validation).
 
 ## 0.1.3
