@@ -1,13 +1,29 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { plugin, PlantUmlExtractor } from "../src/index.js";
+
+function readManifestExtensions(): string[] {
+  const pkgJsonPath = resolve(
+    fileURLToPath(new URL(".", import.meta.url)),
+    "..",
+    "package.json",
+  );
+  const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
+  return pkg.reponova?.extensions ?? [];
+}
 
 describe("@reponova/lang-plantuml plugin", () => {
   it("exports a valid LanguagePlugin", () => {
     expect(plugin.id).toBe("plantuml");
-    expect(plugin.extensions).toEqual([".puml", ".plantuml"]);
     expect(plugin.grammarPath).toBeUndefined();
     expect(plugin.extractor).toBeInstanceOf(PlantUmlExtractor);
     expect(plugin.outline).toBeUndefined();
+  });
+
+  it("declares extensions in its manifest (authoritative source)", () => {
+    expect(readManifestExtensions()).toEqual([".puml", ".plantuml"]);
   });
 
   it("extractor has correct metadata", () => {

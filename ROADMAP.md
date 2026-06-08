@@ -38,17 +38,23 @@ The architecture is **stable**: the items below are assumed by every existing an
 
 ### 2.1 Plugin contract
 
-Every official plugin is a regular npm package that satisfies three requirements:
+Every official plugin is a regular npm package that satisfies four requirements:
 
-1. The `package.json` carries the marker `"reponova": { "type": "language" }`.
-2. The entry point exports a `plugin` (or `default`) object conforming to `LanguagePlugin`.
-3. The plugin is **explicitly declared** by the consumer in `reponova.yml` under `plugins:`
-   and installed via `reponova lang add <pkg>`. There is no filesystem auto-scanning.
+1. `package.json.reponova.type === "language"`.
+2. `package.json.reponova.extensions` is a non-empty `string[]` — the single source
+   of truth for which files the plugin handles, read by reponova at load time and
+   by `reponova lang suggest` against the npm registry.
+3. `package.json.keywords` includes `"reponova-language"` so the plugin is
+   discoverable on the npm registry.
+4. The entry point exports a `plugin` (or `default`) object conforming to
+   `LanguagePlugin`. The plugin is **explicitly declared** by the consumer in
+   `reponova.yml` under `plugins:` and installed via `reponova lang add <pkg>`
+   (or interactively via `reponova lang suggest`). There is no filesystem
+   auto-scanning at runtime.
 
 ```typescript
 interface LanguagePlugin {
   readonly id: string;                       // e.g. "rust"
-  readonly extensions: string[];             // e.g. [".rs"]
   readonly fileType?: string;                // bucket in detected-files.json (defaults to id)
   readonly grammarPath?: string;             // absolute path to a tree-sitter .wasm
   readonly extractor: LanguageExtractor;     // mandatory
@@ -58,7 +64,6 @@ interface LanguagePlugin {
 
 interface LanguageExtractor {
   readonly languageId: string;
-  readonly extensions: string[];
   readonly wasmFile?: string;                // omitted = regex-based extraction
   extract(tree: SyntaxTree | null, sourceCode: string, filePath: string): FileExtraction;
   resolveImportPath(importModule: string, currentFilePath: string): string[];

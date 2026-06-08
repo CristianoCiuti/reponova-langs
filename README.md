@@ -18,6 +18,16 @@ Each plugin extends RepoNova's knowledge graph with support for a specific langu
 
 ## Install a plugin in your RepoNova project
 
+The fastest path is to let RepoNova suggest the plugins relevant to your repo. Inside a project run:
+
+```bash
+reponova lang suggest
+```
+
+`lang suggest` scans your sources, queries npm for every package tagged with the `reponova-language` keyword and offers an interactive checkbox to install only the ones you actually need.
+
+If you prefer to install plugins explicitly, the official set is:
+
 ```bash
 reponova lang add @reponova/lang-python
 reponova lang add @reponova/lang-javascript
@@ -32,7 +42,9 @@ Each plugin's README documents what it extracts and the available `reponova.yml`
 
 ## Architecture
 
-Every plugin is an independent npm package conforming to the `LanguagePlugin` contract defined by [reponova](https://github.com/CristianoCiuti/reponova). A plugin declares its file extensions, optionally ships a tree-sitter `.wasm` grammar bundled inside the published tarball, and exposes an `extractor` that returns symbols, imports, and references for each parsed file.
+Every plugin is an independent npm package conforming to the `LanguagePlugin` contract defined by [reponova](https://github.com/CristianoCiuti/reponova). A plugin declares its supported file extensions in `package.json` under `reponova.extensions` — the single source of truth read by both the plugin loader and the registry-side discovery used by `reponova lang suggest`. It optionally ships a tree-sitter `.wasm` grammar bundled inside the published tarball, and exposes an `extractor` that returns symbols, imports, and references for each parsed file.
+
+To be discoverable on the npm registry, a plugin must include `"reponova-language"` in its `package.json` `keywords` — the canonical token consulted by `reponova lang suggest`.
 
 Tree-sitter grammars are pinned by version and SHA-256, downloaded at build time, and re-distributed as part of each plugin's published artefact — consumers never need to manage grammar binaries themselves.
 

@@ -4,8 +4,7 @@
   "description": "PlantUML diagram support for RepoNova",
   "keywords": [
     "reponova",
-    "reponova-plugin",
-    "language-plugin",
+    "reponova-language",
     "plantuml",
     "puml",
     "uml",
@@ -39,11 +38,11 @@
     "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
-    "reponova": "^0.4.0"
+    "reponova": "^0.6.0"
   },
   "devDependencies": {
     "@reponova/lang-test-utils": "workspace:*",
-    "reponova": "^0.4.3"
+    "reponova": "^0.6.0"
   },
   "reponova": {
     "type": "language",

@@ -44,7 +44,6 @@ const TSX_INDEX_CANDIDATES = [
 
 export const plugin: LanguagePlugin = {
   id: "tsx",
-  extensions: [".tsx"],
   fileType: "tsx",
   grammarPath,
   extractor: new TypescriptExtractor({

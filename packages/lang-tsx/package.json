@@ -4,8 +4,7 @@
   "description": "TSX (TypeScript + JSX) language support for RepoNova",
   "keywords": [
     "reponova",
-    "reponova-plugin",
-    "language-plugin",
+    "reponova-language",
     "tsx",
     "jsx",
     "typescript",
@@ -42,12 +41,12 @@
     "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
-    "reponova": "^0.4.0"
+    "reponova": "^0.6.0"
   },
   "devDependencies": {
     "@reponova/lang-test-utils": "workspace:*",
     "@reponova/lang-typescript-core": "workspace:*",
-    "reponova": "^0.4.3",
+    "reponova": "^0.6.0",
     "web-tree-sitter": "^0.25.10"
   },
   "reponova": {
