@@ -65,6 +65,25 @@ export interface JsonExtractorOptions {
   maxGenericKeys?: number;
 }
 
+/**
+ * Resolve the effective `maxGenericKeys` cap by trying the candidates
+ * in order — the first one that is a finite non-negative number wins.
+ *
+ * Hoisted to a free function rather than a private method so the same
+ * fallback ladder is trivially testable in isolation and identical
+ * across all call sites (today there is only one, but the type contract
+ * may grow if the extractor ever surfaces additional per-call knobs).
+ */
+function resolveMaxGenericKeys(
+  fromPluginConfig: unknown,
+  fromConstructor: number,
+): number {
+  if (typeof fromPluginConfig === "number" && fromPluginConfig >= 0) {
+    return fromPluginConfig;
+  }
+  return fromConstructor;
+}
+
 /** What kind of well-known JSON file we are looking at, by filename. */
 export type JsonKind =
   | "package"
@@ -704,7 +723,33 @@ export class JsonExtractor implements LanguageExtractor {
       typeof v === "number" && v >= 0 ? v : DEFAULT_MAX_GENERIC_KEYS;
   }
 
-  extract(_tree: SyntaxTree | null, sourceCode: string, filePath: string): FileExtraction {
+  /**
+   * Extract symbols, imports, and references from a JSON / JSONC file.
+   *
+   * The optional `pluginConfig` argument is forwarded by RepoNova >= 0.7
+   * after merging the plugin's `configDefaults` with the user's
+   * `plugins.json` block in `reponova.yml`. The only key currently
+   * honoured here is `maxGenericKeys`. Precedence, highest first:
+   *
+   *   1. `pluginConfig.maxGenericKeys` — user value from `reponova.yml`
+   *      (or the configDefaults baseline of 200, since the loader
+   *      always merges defaults into the payload).
+   *   2. `this.maxGenericKeys`         — value passed at construction
+   *      time via {@link JsonExtractorOptions} — kept as a fallback for
+   *      programmatic consumers that instantiate the extractor
+   *      directly and never go through the plugin loader.
+   *   3. {@link DEFAULT_MAX_GENERIC_KEYS} (`200`) — used only when both
+   *      of the above are absent or invalid.
+   *
+   * Invalid values (non-numeric, negative, `NaN`) at either level fall
+   * through to the next tier rather than disabling the cap.
+   */
+  extract(
+    _tree: SyntaxTree | null,
+    sourceCode: string,
+    filePath: string,
+    pluginConfig?: Readonly<Record<string, unknown>>,
+  ): FileExtraction {
     const root = parseTree(sourceCode);
     const ctx: ExtractCtx = {
       filePath,
@@ -716,6 +761,11 @@ export class JsonExtractor implements LanguageExtractor {
       imports: [],
       references: [],
     };
+
+    const effectiveMaxGenericKeys = resolveMaxGenericKeys(
+      pluginConfig?.maxGenericKeys,
+      this.maxGenericKeys,
+    );
 
     const kind = detectJsonKind(filePath);
     let fileNode: FileNodeDeclaration;
@@ -739,7 +789,7 @@ export class JsonExtractor implements LanguageExtractor {
         fileNode = extractTurbo(root, ctx);
         break;
       default:
-        fileNode = extractGeneric(root, ctx, this.maxGenericKeys);
+        fileNode = extractGeneric(root, ctx, effectiveMaxGenericKeys);
     }
 
     return {

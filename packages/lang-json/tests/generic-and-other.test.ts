@@ -57,6 +57,73 @@ describe("extractor: generic JSON fallback", () => {
     ).toBe(DEFAULT_MAX_GENERIC_KEYS);
   });
 
+  describe("maxGenericKeys via pluginConfig (RepoNova >= 0.7 wiring)", () => {
+    function bigObj(extra = 0): string {
+      const obj: Record<string, number> = {};
+      for (let i = 0; i < DEFAULT_MAX_GENERIC_KEYS + extra; i++) obj[`key_${i}`] = i;
+      return JSON.stringify(obj);
+    }
+
+    it("honours pluginConfig.maxGenericKeys passed at call time", () => {
+      const r = ext.extract(null, bigObj(50), "big.json", { maxGenericKeys: 30 });
+      const keys = r.symbols.filter((s) => s.decorators.includes("json-key"));
+      expect(keys.length).toBe(30);
+    });
+
+    it("pluginConfig wins over the constructor option", () => {
+      const tighter = new JsonExtractor({ maxGenericKeys: 5 });
+      const r = tighter.extract(null, bigObj(50), "big.json", { maxGenericKeys: 40 });
+      const keys = r.symbols.filter((s) => s.decorators.includes("json-key"));
+      expect(keys.length).toBe(40);
+    });
+
+    it("falls through to the constructor option when pluginConfig.maxGenericKeys is invalid", () => {
+      const tighter = new JsonExtractor({ maxGenericKeys: 12 });
+      const srcStr = bigObj(50);
+      for (const bad of [-1, Number.NaN, "20", null, true]) {
+        const r = tighter.extract(null, srcStr, "big.json", {
+          maxGenericKeys: bad as unknown as number,
+        });
+        const keys = r.symbols.filter((s) => s.decorators.includes("json-key"));
+        expect(keys.length).toBe(12);
+      }
+    });
+
+    it("falls through to DEFAULT when both pluginConfig and constructor are absent", () => {
+      const r = ext.extract(null, bigObj(50), "big.json", {});
+      const keys = r.symbols.filter((s) => s.decorators.includes("json-key"));
+      expect(keys.length).toBe(DEFAULT_MAX_GENERIC_KEYS);
+    });
+
+    it("disables the cap when pluginConfig.maxGenericKeys is Infinity", () => {
+      const r = ext.extract(null, bigObj(50), "big.json", {
+        maxGenericKeys: Number.POSITIVE_INFINITY,
+      });
+      const keys = r.symbols.filter((s) => s.decorators.includes("json-key"));
+      expect(keys.length).toBe(DEFAULT_MAX_GENERIC_KEYS + 50);
+    });
+
+    it("ignores unrelated pluginConfig keys without crashing", () => {
+      const r = ext.extract(null, bigObj(50), "big.json", {
+        maxGenericKeys: 7,
+        unrelatedKnob: "value",
+        anotherOne: true,
+      });
+      const keys = r.symbols.filter((s) => s.decorators.includes("json-key"));
+      expect(keys.length).toBe(7);
+    });
+
+    it("schema-recognised files (package.json, tsconfig*, …) ignore maxGenericKeys entirely", () => {
+      const src = JSON.stringify({
+        name: "demo",
+        scripts: { build: "tsup", test: "vitest" },
+      });
+      const r = ext.extract(null, src, "package.json", { maxGenericKeys: 0 });
+      const scriptNodes = r.symbols.filter((s) => s.decorators.includes("npm-script"));
+      expect(scriptNodes.map((s) => s.name).sort()).toEqual(["build", "test"]);
+    });
+  });
+
   it("does not crash on an empty document", () => {
     const r = ext.extract(null, "", "empty.json");
     expect(r.symbols).toEqual([]);
