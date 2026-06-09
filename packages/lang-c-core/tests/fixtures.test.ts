@@ -15,18 +15,27 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SyntaxTree } from "reponova";
-import { plugin, CExtractor } from "../src/index.js";
+import { CFamilyExtractor } from "../src/index.js";
 import { loadFixture, loadGrammar } from "@reponova/lang-test-utils";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const grammarPath = resolve(packageRoot, "../lang-c/grammars/tree-sitter-c.wasm");
 const cjsonRoot = resolve(packageRoot, "tests/fixtures/complex/cJSON-acc76239");
 
 let grammar: Awaited<ReturnType<typeof loadGrammar>>;
 
 beforeAll(async () => {
-  grammar = await loadGrammar(plugin.grammarPath!);
+  grammar = await loadGrammar(grammarPath);
   if (!grammar) throw new Error("tree-sitter-c.wasm not present; run `pnpm grammar-fetch`");
 });
+
+function makeCExtractor(): CFamilyExtractor {
+  return new CFamilyExtractor({
+    languageId: "c",
+    extensions: [".c", ".h"],
+    wasmFile: "tree-sitter-c.wasm",
+  });
+}
 
 async function parse(source: string): Promise<SyntaxTree> {
   return grammar!.parse(source) as SyntaxTree;
@@ -47,7 +56,7 @@ describe("simple/greeter fixture", () => {
   it("extracts greet and main from greeter.c with proper docstring and includes", async () => {
     const source = loadFixture(packageRoot, "simple/greeter.c");
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "simple/greeter.c");
+    const result = makeCExtractor().extract(tree, source, "simple/greeter.c");
 
     const greet = result.symbols.find((s) => s.name === "greet");
     expect(greet?.kind).toBe("function");
@@ -80,7 +89,7 @@ describe("simple/greeter fixture", () => {
   it("extracts a forward declaration from greeter.h tagged as `declaration`", async () => {
     const source = loadFixture(packageRoot, "simple/greeter.h");
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "simple/greeter.h");
+    const result = makeCExtractor().extract(tree, source, "simple/greeter.h");
 
     const greet = result.symbols.find((s) => s.name === "greet");
     expect(greet?.kind).toBe("function");
@@ -96,7 +105,7 @@ describe("medium/cache fixture", () => {
   it("captures typedefs, enums, structs, function pointers, and macros", async () => {
     const source = loadFixture(packageRoot, "medium/cache.h");
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "medium/cache.h");
+    const result = makeCExtractor().extract(tree, source, "medium/cache.h");
 
     // Macros.
     const macros = result.symbols.filter((s) => s.decorators.includes("macro"));
@@ -138,7 +147,7 @@ describe("medium/cache fixture", () => {
   it("emits include and call graph for cache.c", async () => {
     const source = loadFixture(packageRoot, "medium/cache.c");
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "medium/cache.c");
+    const result = makeCExtractor().extract(tree, source, "medium/cache.c");
 
     const modules = result.imports.map((i) => i.module);
     expect(modules).toContain("<stdlib.h>");
@@ -178,7 +187,7 @@ describe("medium/cache fixture", () => {
   });
 
   it("cache.h `#include` of cache.h-relative siblings resolves through resolveImportPath", () => {
-    const ext = new CExtractor();
+    const ext = makeCExtractor();
     // <stddef.h> is system → no candidates.
     expect(ext.resolveImportPath("<stddef.h>", "medium/cache.h")).toEqual([]);
     // "cache.h" sits next to cache.c → first candidate is `medium/cache.h`.
@@ -220,7 +229,7 @@ describe("complex fixture: cJSON 1.7.18", () => {
       const rel = `complex/cJSON-acc76239/${abs.split(/[\\/]/).pop()}`;
       const source = readFileSync(abs, "utf8");
       const tree = await parse(source);
-      const result = new CExtractor().extract(tree, source, rel);
+      const result = makeCExtractor().extract(tree, source, rel);
 
       expect(result.symbols.length, `${rel}: expected symbols`).toBeGreaterThan(0);
 
@@ -250,7 +259,7 @@ describe("complex fixture: cJSON 1.7.18", () => {
   it("extracts landmark cJSON public API symbols from cJSON.h", async () => {
     const source = readFileSync(join(cjsonRoot, "cJSON.h"), "utf8");
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "complex/cJSON-acc76239/cJSON.h");
+    const result = makeCExtractor().extract(tree, source, "complex/cJSON-acc76239/cJSON.h");
 
     const symbolNames = result.symbols.map((s) => s.name);
 
@@ -285,7 +294,7 @@ describe("complex fixture: cJSON 1.7.18", () => {
   it("extracts implementation details and the static helper layer from cJSON.c", async () => {
     const source = readFileSync(join(cjsonRoot, "cJSON.c"), "utf8");
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "complex/cJSON-acc76239/cJSON.c");
+    const result = makeCExtractor().extract(tree, source, "complex/cJSON-acc76239/cJSON.c");
 
     // cJSON.c includes both system headers and the local cJSON.h.
     const modules = result.imports.map((i) => i.module).sort();
@@ -339,7 +348,7 @@ describe("complex fixture: cJSON 1.7.18", () => {
   it("extracts cJSON_Utils.h public API and references", async () => {
     const source = readFileSync(join(cjsonRoot, "cJSON_Utils.h"), "utf8");
     const tree = await parse(source);
-    const result = new CExtractor().extract(
+    const result = makeCExtractor().extract(
       tree,
       source,
       "complex/cJSON-acc76239/cJSON_Utils.h",

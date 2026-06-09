@@ -1,5 +1,5 @@
 /**
- * C language support for outline generation.
+ * C-family language support for outline generation.
  *
  * Two extraction strategies, parallel to the extractor:
  *   1. tree-sitter (primary): full AST parsing via WASM grammar
@@ -11,8 +11,17 @@
  * `static? type name(...)` function definitions, and `struct/enum NAME`
  * declarations) — and is meant as a graceful degradation, not a parser
  * replacement.
+ *
+ * The factory `createCFamilyOutline({ wasmFile })` lets the C and C++
+ * plugins share the same outline implementation while binding to
+ * different grammar artefacts. A pre-bound `c` export ships the C
+ * default for convenience.
  */
 import type { LanguageSupport, SyntaxNode } from "reponova";
+import {
+  extractDeclaratorName,
+  findFunctionDeclarator,
+} from "./extractor.js";
 
 interface ImportEntry { module: string; names?: string[]; line: number; }
 interface FunctionEntry {
@@ -40,11 +49,28 @@ interface FileOutline {
   classes: ClassEntry[];
 }
 
-export const c: LanguageSupport = {
-  wasmFile: "tree-sitter-c.wasm",
-  treeSitterExtract,
-  regexExtract,
-};
+/** Options for `createCFamilyOutline`. */
+export interface CFamilyOutlineOptions {
+  /** WASM grammar filename (e.g. `"tree-sitter-c.wasm"`, `"tree-sitter-cpp.wasm"`). */
+  wasmFile: string;
+}
+
+/**
+ * Build a `LanguageSupport` instance that produces a `FileOutline` for
+ * a C-family source file. The same logic powers both C and C++; the
+ * only difference is the `wasmFile` field consumed by the outline
+ * loader to find the right grammar artefact.
+ */
+export function createCFamilyOutline(opts: CFamilyOutlineOptions): LanguageSupport {
+  return {
+    wasmFile: opts.wasmFile,
+    treeSitterExtract,
+    regexExtract,
+  };
+}
+
+/** Default outline implementation bound to `tree-sitter-c.wasm`. */
+export const c: LanguageSupport = createCFamilyOutline({ wasmFile: "tree-sitter-c.wasm" });
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TREE-SITTER EXTRACTION
@@ -238,41 +264,6 @@ function calleeText(node: SyntaxNode): string | null {
   return t.length > 0 ? t : null;
 }
 
-function findFunctionDeclarator(declarator: SyntaxNode | null): SyntaxNode | null {
-  if (!declarator) return null;
-  if (declarator.type === "function_declarator") {
-    const inner = declarator.childForFieldName("declarator");
-    if (!inner) return null;
-    if (inner.type === "parenthesized_declarator") return null;
-    return declarator;
-  }
-  if (declarator.type === "pointer_declarator" || declarator.type === "array_declarator") {
-    return findFunctionDeclarator(declarator.childForFieldName("declarator"));
-  }
-  return null;
-}
-
-function extractDeclaratorName(node: SyntaxNode | null): string | null {
-  if (!node) return null;
-  switch (node.type) {
-    case "identifier":
-    case "field_identifier":
-    case "type_identifier":
-      return node.text;
-    case "init_declarator":
-    case "pointer_declarator":
-    case "array_declarator":
-    case "function_declarator":
-      return extractDeclaratorName(node.childForFieldName("declarator"));
-    case "parenthesized_declarator": {
-      const inner = node.namedChildren[0];
-      return inner ? extractDeclaratorName(inner) : null;
-    }
-    default:
-      return null;
-  }
-}
-
 function collectModifierTokens(node: SyntaxNode): string[] {
   const out: string[] = [];
   for (const child of node.namedChildren) {
@@ -428,8 +419,5 @@ function regexExtract(filePath: string, source: string, lineCount: number): File
     i++;
   }
 
-  // We didn't track multi-line bodies in the regex pass — leave
-  // `end_line` set to the declaration's line; the outline consumer is
-  // OK with single-line entries for the fallback path.
   return { file_path: filePath, line_count: lineCount, imports, functions, classes };
 }

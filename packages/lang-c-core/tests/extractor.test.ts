@@ -1,25 +1,17 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SyntaxTree } from "reponova";
-import { plugin, CExtractor } from "../src/index.js";
+import { CFamilyExtractor } from "../src/index.js";
 import { loadGrammar } from "@reponova/lang-test-utils";
 
-function readManifestExtensions(): string[] {
-  const pkgJsonPath = resolve(
-    fileURLToPath(new URL(".", import.meta.url)),
-    "..",
-    "package.json",
-  );
-  const pkg = JSON.parse(readFileSync(pkgJsonPath, "utf-8"));
-  return pkg.reponova?.extensions ?? [];
-}
+const packageRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
+const grammarPath = resolve(packageRoot, "../lang-c/grammars/tree-sitter-c.wasm");
 
 let grammar: Awaited<ReturnType<typeof loadGrammar>>;
 
 beforeAll(async () => {
-  grammar = await loadGrammar(plugin.grammarPath!);
+  grammar = await loadGrammar(grammarPath);
   if (!grammar) throw new Error("tree-sitter-c.wasm not present; run `pnpm grammar-fetch`");
 });
 
@@ -27,23 +19,35 @@ async function parse(source: string): Promise<SyntaxTree> {
   return grammar!.parse(source) as SyntaxTree;
 }
 
-describe("@reponova/lang-c plugin", () => {
-  it("exports a valid LanguagePlugin", () => {
-    expect(plugin.id).toBe("c");
-    expect(plugin.grammarPath).toBeDefined();
-    expect(plugin.extractor).toBeInstanceOf(CExtractor);
-    expect(plugin.outline).toBeDefined();
+/**
+ * Instantiate the C-family extractor with C flavor defaults. Tests
+ * exercise the C subset; the C++ subclass is covered in `lang-cpp`.
+ */
+function makeCExtractor(): CFamilyExtractor {
+  return new CFamilyExtractor({
+    languageId: "c",
+    extensions: [".c", ".h"],
+    wasmFile: "tree-sitter-c.wasm",
   });
+}
 
-  it("declares extensions in its manifest (authoritative source)", () => {
-    expect(readManifestExtensions()).toEqual([".c", ".h"]);
-  });
-
-  it("extractor has correct metadata", () => {
-    const ext = new CExtractor();
+describe("CFamilyExtractor — C flavor metadata", () => {
+  it("honors constructor options", () => {
+    const ext = makeCExtractor();
     expect(ext.languageId).toBe("c");
     expect(ext.extensions).toEqual([".c", ".h"]);
     expect(ext.wasmFile).toBe("tree-sitter-c.wasm");
+  });
+
+  it("supports custom flavor configuration (C++ preview)", () => {
+    const ext = new CFamilyExtractor({
+      languageId: "cpp",
+      extensions: [".cpp", ".hpp"],
+      wasmFile: "tree-sitter-cpp.wasm",
+    });
+    expect(ext.languageId).toBe("cpp");
+    expect(ext.extensions).toEqual([".cpp", ".hpp"]);
+    expect(ext.wasmFile).toBe("tree-sitter-cpp.wasm");
   });
 });
 
@@ -59,7 +63,7 @@ static int greet(const char* name) {
 }
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "src/greeter.c");
+    const result = makeCExtractor().extract(tree, source, "src/greeter.c");
 
     expect(result.language).toBe("c");
     expect(result.fileNode.kind).toBe("module");
@@ -80,7 +84,7 @@ static int greet(const char* name) {
 #include "../shared/util.h"
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "src/main.c");
+    const result = makeCExtractor().extract(tree, source, "src/main.c");
 
     expect(result.imports.map((i) => i.module)).toEqual([
       "<stdio.h>",
@@ -106,7 +110,7 @@ int main(void) {
 }
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "main.c");
+    const result = makeCExtractor().extract(tree, source, "main.c");
 
     const callsFromMain = result.references
       .filter((r) => r.fromSymbol === "main.main" && r.kind === "calls")
@@ -123,7 +127,7 @@ int sum(void) {
 }
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "u.c");
+    const result = makeCExtractor().extract(tree, source, "u.c");
     const edges = result.references.filter(
       (r) => r.fromSymbol === "u.sum" && r.name === "counter",
     );
@@ -136,7 +140,7 @@ struct V { int (*f)(int); };
 int caller(struct V* v) { return v->f(1) + v->f(2); }
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "u.c");
+    const result = makeCExtractor().extract(tree, source, "u.c");
     const calls = result.references.filter((r) => r.fromSymbol === "u.caller");
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.some((c) => c.name === "v.f")).toBe(true);
@@ -152,7 +156,7 @@ struct Point {
 };
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "geom.c");
+    const result = makeCExtractor().extract(tree, source, "geom.c");
 
     const point = result.symbols.find((s) => s.name === "Point");
     expect(point?.kind).toBe("class");
@@ -175,7 +179,7 @@ struct Handlers {
 };
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "h.c");
+    const result = makeCExtractor().extract(tree, source, "h.c");
     const onOpen = result.symbols.find((s) => s.name === "on_open");
     expect(onOpen?.kind).toBe("method");
     expect(onOpen?.decorators).toContain("function_pointer");
@@ -190,7 +194,7 @@ union Value {
 };
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "v.c");
+    const result = makeCExtractor().extract(tree, source, "v.c");
     const u = result.symbols.find((s) => s.name === "Value");
     expect(u?.kind).toBe("class");
     expect(u?.decorators).toContain("union");
@@ -201,7 +205,7 @@ union Value {
 enum Status { OK = 0, ERR = -1, PENDING };
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "s.c");
+    const result = makeCExtractor().extract(tree, source, "s.c");
 
     const status = result.symbols.find((s) => s.name === "Status");
     expect(status?.kind).toBe("enum");
@@ -220,7 +224,7 @@ typedef int counter_t;
 typedef int (*callback_t)(int);
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "t.c");
+    const result = makeCExtractor().extract(tree, source, "t.c");
 
     const counter = result.symbols.find((s) => s.name === "counter_t");
     expect(counter?.kind).toBe("type");
@@ -239,7 +243,7 @@ typedef struct {
 } Point;
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "p.c");
+    const result = makeCExtractor().extract(tree, source, "p.c");
 
     const recordSymbols = result.symbols.filter((s) => s.kind === "class");
     expect(recordSymbols.length).toBe(1);
@@ -257,7 +261,7 @@ typedef struct Point {
 } Pt;
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "p.c");
+    const result = makeCExtractor().extract(tree, source, "p.c");
 
     const point = result.symbols.find((s) => s.name === "Point" && s.kind === "class");
     expect(point).toBeDefined();
@@ -271,7 +275,7 @@ struct Foo;
 struct Bar { int x; };
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "f.c");
+    const result = makeCExtractor().extract(tree, source, "f.c");
     const foo = result.symbols.find((s) => s.name === "Foo");
     const bar = result.symbols.find((s) => s.name === "Bar");
     expect(foo).toBeUndefined();
@@ -286,7 +290,7 @@ describe("CExtractor — macros and globals", () => {
 #define GREETING "hello"
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "c.c");
+    const result = makeCExtractor().extract(tree, source, "c.c");
 
     const max = result.symbols.find((s) => s.name === "MAX");
     expect(max?.kind).toBe("constant");
@@ -302,7 +306,7 @@ describe("CExtractor — macros and globals", () => {
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "c.c");
+    const result = makeCExtractor().extract(tree, source, "c.c");
     const max = result.symbols.find((s) => s.name === "MAX");
     expect(max?.kind).toBe("function");
     expect(max?.decorators).toEqual(expect.arrayContaining(["macro", "function_like"]));
@@ -315,7 +319,7 @@ static int local_counter = 0;
 const char* greeting = "hi";
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "g.c");
+    const result = makeCExtractor().extract(tree, source, "g.c");
 
     const counter = result.symbols.find((s) => s.name === "counter");
     expect(counter?.kind).toBe("variable");
@@ -335,7 +339,7 @@ extern void external_decl(void);
 int local_def(int x) { return x; }
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "p.c");
+    const result = makeCExtractor().extract(tree, source, "p.c");
 
     const ext = result.symbols.find((s) => s.name === "external_decl");
     expect(ext?.kind).toBe("function");
@@ -359,7 +363,7 @@ void api(void);
 #endif
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "header.h");
+    const result = makeCExtractor().extract(tree, source, "header.h");
 
     const api = result.symbols.find((s) => s.name === "api");
     expect(api?.kind).toBe("function");
@@ -380,7 +384,7 @@ void public_fn(int x);
 #endif
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "header.h");
+    const result = makeCExtractor().extract(tree, source, "header.h");
 
     expect(result.symbols.find((s) => s.name === "public_fn")).toBeDefined();
   });
@@ -396,7 +400,7 @@ void other_platform(void);
 #endif
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "platform.h");
+    const result = makeCExtractor().extract(tree, source, "platform.h");
 
     const names = result.symbols.map((s) => s.name).sort();
     expect(names).toEqual(["linux_only", "other_platform", "win_only"]);
@@ -417,7 +421,7 @@ struct PubS { int x; };
 typedef int pub_t;
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "m.c");
+    const result = makeCExtractor().extract(tree, source, "m.c");
 
     // Exports = linker-visible definitions only:
     // - pub_a (function definition)
@@ -440,7 +444,7 @@ describe("CExtractor — docstring variants", () => {
 int foo(void) { return 0; }
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "d.c");
+    const result = makeCExtractor().extract(tree, source, "d.c");
     const foo = result.symbols.find((s) => s.name === "foo");
     expect(foo?.docstring).toBe("summary line.");
   });
@@ -452,7 +456,7 @@ int foo(void) { return 0; }
 int bar(void) { return 1; }
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "d.c");
+    const result = makeCExtractor().extract(tree, source, "d.c");
     const bar = result.symbols.find((s) => s.name === "bar");
     expect(bar?.docstring).toBeDefined();
     expect(bar?.docstring).toContain("first line");
@@ -467,7 +471,7 @@ int bar(void) { return 1; }
 int x;
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "d.c");
+    const result = makeCExtractor().extract(tree, source, "d.c");
     expect(result.fileNode.docstring).toBe("Plain header — first line of summary.");
   });
 
@@ -476,7 +480,7 @@ int x;
 int x;
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "d.c");
+    const result = makeCExtractor().extract(tree, source, "d.c");
     expect(result.fileNode.docstring).toBe("File-level summary.");
   });
 
@@ -485,7 +489,7 @@ int x;
 int x;
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "d.c");
+    const result = makeCExtractor().extract(tree, source, "d.c");
     expect(result.fileNode.docstring).toBe("File-level summary.");
   });
 
@@ -495,7 +499,7 @@ int x;
 int z(void) { return 0; }
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "d.c");
+    const result = makeCExtractor().extract(tree, source, "d.c");
     const z = result.symbols.find((s) => s.name === "z");
     expect(z?.docstring).toBeUndefined();
   });
@@ -507,7 +511,7 @@ describe("CExtractor — anonymous and inline records", () => {
 typedef enum { A, B, C } abc_t;
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "e.c");
+    const result = makeCExtractor().extract(tree, source, "e.c");
     const abc = result.symbols.find((s) => s.name === "abc_t" && s.kind === "enum");
     expect(abc).toBeDefined();
     const aliasType = result.symbols.find((s) => s.name === "abc_t" && s.kind === "type");
@@ -521,7 +525,7 @@ typedef enum { A, B, C } abc_t;
 struct { int a; int b; } anon_var;
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "a.c");
+    const result = makeCExtractor().extract(tree, source, "a.c");
     const types = result.symbols.filter((s) => s.kind === "class");
     expect(types.length).toBe(0);
   });
@@ -531,7 +535,7 @@ struct { int a; int b; } anon_var;
 struct Pair { int a; int b; } pair_var;
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "i.c");
+    const result = makeCExtractor().extract(tree, source, "i.c");
     const pair = result.symbols.find((s) => s.name === "Pair" && s.kind === "class");
     expect(pair).toBeDefined();
     const pairVar = result.symbols.find((s) => s.name === "pair_var");
@@ -543,7 +547,7 @@ struct Pair { int a; int b; } pair_var;
 enum E { ONE, TWO } e_var;
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "i.c");
+    const result = makeCExtractor().extract(tree, source, "i.c");
     const e = result.symbols.find((s) => s.name === "E" && s.kind === "enum");
     expect(e).toBeDefined();
   });
@@ -554,7 +558,7 @@ int* make_array(void) { return 0; }
 int table[10];
 `;
     const tree = await parse(source);
-    const result = new CExtractor().extract(tree, source, "p.c");
+    const result = makeCExtractor().extract(tree, source, "p.c");
     const fn = result.symbols.find((s) => s.name === "make_array");
     expect(fn?.kind).toBe("function");
     const table = result.symbols.find((s) => s.name === "table");
@@ -570,49 +574,9 @@ int table[10];
 int (*get_fn(void))(int);
 `;
     const tree = await parse(source);
-    expect(() => new CExtractor().extract(tree, source, "p.c")).not.toThrow();
+    expect(() => makeCExtractor().extract(tree, source, "p.c")).not.toThrow();
   });
 });
 
-describe("CExtractor.resolveImportPath", () => {
-  it("returns no candidates for system includes (angle brackets)", () => {
-    const ext = new CExtractor();
-    expect(ext.resolveImportPath("<stdio.h>", "src/main.c")).toEqual([]);
-    expect(ext.resolveImportPath("<sys/types.h>", "src/main.c")).toEqual([]);
-  });
-
-  it("resolves a quoted include relative to the including file's directory", () => {
-    const ext = new CExtractor();
-    expect(ext.resolveImportPath("util.h", "src/main.c")).toEqual([
-      "src/util.h",
-      "util.h",
-    ]);
-  });
-
-  it("walks parent directories for `../shared/util.h` style includes", () => {
-    const ext = new CExtractor();
-    expect(ext.resolveImportPath("../shared/util.h", "src/main.c")).toEqual([
-      "shared/util.h",
-      "../shared/util.h",
-    ]);
-  });
-
-  it("dedupes when the relative and repo-root paths coincide", () => {
-    const ext = new CExtractor();
-    // File at repo root → dirname is empty → relative-to-file === repo-root path.
-    expect(ext.resolveImportPath("util.h", "main.c")).toEqual(["util.h"]);
-  });
-
-  it("normalises Windows-style backslashes in the include path", () => {
-    const ext = new CExtractor();
-    expect(ext.resolveImportPath("sub\\util.h", "src/main.c")).toEqual([
-      "src/sub/util.h",
-      "sub/util.h",
-    ]);
-  });
-
-  it("returns [] for empty input", () => {
-    const ext = new CExtractor();
-    expect(ext.resolveImportPath("", "src/main.c")).toEqual([]);
-  });
-});
+// `resolveImportPath` / `resolveCInclude` are exhaustively unit-tested in
+// `resolve-imports.test.ts`.
