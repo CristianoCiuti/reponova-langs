@@ -56,6 +56,20 @@
       },
       "sha256": "5fb488d0cabb4775a594bab85682de5ad6ce83c0d6ac997a9f82dd084d571240",
       "size": 411770
+    },
+    {
+      "id": "tree-sitter-java",
+      "package": "lang-java",
+      "filename": "tree-sitter-java.wasm",
+      "source": {
+        "type": "github-release",
+        "owner": "tree-sitter",
+        "repo": "tree-sitter-java",
+        "tag": "v0.23.5",
+        "asset": "tree-sitter-java.wasm"
+      },
+      "sha256": "4fdeac4ca6ca089f06c6f7e562abcac1733cd465728cc7031ebb73c2019122c4",
+      "size": 414641
     }
   ]
 }
