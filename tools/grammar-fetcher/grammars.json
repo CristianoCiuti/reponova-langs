@@ -70,6 +70,20 @@
       },
       "sha256": "4fdeac4ca6ca089f06c6f7e562abcac1733cd465728cc7031ebb73c2019122c4",
       "size": 414641
+    },
+    {
+      "id": "tree-sitter-c",
+      "package": "lang-c",
+      "filename": "tree-sitter-c.wasm",
+      "source": {
+        "type": "github-release",
+        "owner": "tree-sitter",
+        "repo": "tree-sitter-c",
+        "tag": "v0.24.2",
+        "asset": "tree-sitter-c.wasm"
+      },
+      "sha256": "83e8d7902b9d7f8c7c5cd4bd9acb5c7eb5faf42c09f85546b183964d3b5f48f9",
+      "size": 645157
     }
   ]
 }
