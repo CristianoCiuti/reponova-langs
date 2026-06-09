@@ -1,0 +1,74 @@
+{
+  "name": "@reponova/lang-mermaid",
+  "version": "0.0.0",
+  "description": "Mermaid diagram support for RepoNova",
+  "keywords": [
+    "reponova",
+    "reponova-language",
+    "mermaid",
+    "mmd",
+    "diagram",
+    "flowchart",
+    "sequence-diagram",
+    "class-diagram",
+    "state-diagram",
+    "er-diagram",
+    "gantt",
+    "mindmap",
+    "timeline",
+    "c4-diagram",
+    "knowledge-graph",
+    "static-analysis"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "size": "size-limit",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "peerDependencies": {
+    "reponova": "^0.6.0"
+  },
+  "devDependencies": {
+    "@reponova/lang-test-utils": "workspace:*",
+    "reponova": "^0.6.0"
+  },
+  "reponova": {
+    "type": "language",
+    "id": "mermaid",
+    "extensions": [
+      ".mmd",
+      ".mermaid"
+    ]
+  },
+  "size-limit": [
+    {
+      "name": "dist (raw)",
+      "path": "dist/index.js",
+      "limit": "50 KB",
+      "brotli": false,
+      "gzip": false
+    }
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CristianoCiuti/reponova-langs.git",
+    "directory": "packages/lang-mermaid"
+  },
+  "homepage": "https://github.com/CristianoCiuti/reponova-langs/tree/main/packages/lang-mermaid"
+}

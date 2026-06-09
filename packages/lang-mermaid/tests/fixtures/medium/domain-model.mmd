@@ -1,0 +1,52 @@
+---
+title: Billing domain model
+---
+classDiagram
+    direction LR
+
+    class Customer {
+        +String id
+        +String email
+        -List~Subscription~ subscriptions
+        +activate() void
+        +deactivate() void
+    }
+
+    class Subscription {
+        +String id
+        +Plan plan
+        +Date startedAt
+        +Date endedAt
+        +cancel() void
+    }
+
+    class Plan {
+        +String name
+        +int monthlyCents
+        +String currency
+    }
+
+    class Invoice {
+        +String id
+        +int totalCents
+        +InvoiceStatus status
+        +pay() void
+    }
+
+    class InvoiceStatus {
+        <<enumeration>>
+        OPEN
+        PAID
+        VOID
+    }
+
+    class PriceCalculator {
+        <<interface>>
+        +priceFor(Subscription) int
+    }
+
+    Customer "1" o-- "*" Subscription : holds
+    Subscription "*" --> "1" Plan : on
+    Customer "1" --> "*" Invoice : owes
+    Invoice ..> InvoiceStatus : status
+    PriceCalculator <|.. Plan : implements

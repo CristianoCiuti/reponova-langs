@@ -277,27 +277,35 @@ familiar with the contract):
 - `M` — 3–5 days
 - `L` — 1–2 weeks
 
-### 6.1 Tier — Enterprise & systems
+### 6.1 Tier — Priority pack
+
+A cross-archetype bundle that takes precedence over the thematic tiers below. Selected by
+explicit user-facing demand and a pragmatic balance between effort and impact. Unlike the
+other tiers, this one groups plugins by **priority**, not by theme — so it intentionally
+mixes Archetype A grammar-based extractors with one Archetype B regex plugin. Recommended
+implementation order goes lightest → heaviest (`S` → `M` → `L`) to validate the workflow
+quickly, then absorb the heavier import-resolution work last. C and C++ stay paired so the
+`#include` resolver can be reused.
+
+| Plugin id | Extensions | Strategy | Archetype | Effort | Notes |
+|---|---|---|---|---|---|
+| `lang-mermaid` | `.mmd`, `.mermaid` (also fenced in Markdown) | regex | B | S | Companion to `lang-plantuml`; flowchart / sequence / class / state / ER / C4 diagram families |
+| `lang-sql` | `.sql` | `tree-sitter-sql` (community) | A | M | Tables / views / procedures + cross-references; multi-dialect tolerance |
+| `lang-java` | `.java` | `tree-sitter-java` (official) | A | M–L | Complex imports, generics, package → directory mapping |
+| `lang-c` | `.c`, `.h` | `tree-sitter-c` (official) | A | M | Header inclusion graph; pair with C++ |
+| `lang-cpp` | `.cpp`, `.cc`, `.cxx`, `.hpp`, `.h++` | `tree-sitter-cpp` (official) | A | L | Header/source split, namespaces, templates; reuses the C `#include` resolver |
+
+### 6.2 Tier — Enterprise & systems
 
 Mainstream compiled languages with a heavy enterprise footprint and mature tree-sitter
-grammars. All Archetype A. Highest impact-per-plugin after the web stack.
+grammars. All Archetype A. Highest impact-per-plugin after the web stack and the priority
+pack.
 
 | Plugin id | Extensions | Tree-sitter grammar | Effort | Notes |
 |---|---|---|---|---|
-| `lang-java` | `.java` | `tree-sitter-java` (official) | M–L | Complex imports, generics, package → directory mapping |
 | `lang-go` | `.go` | `tree-sitter-go` (official) | M | Clean package system, GOPATH + `go.mod` resolution |
 | `lang-csharp` | `.cs` | `tree-sitter-c-sharp` (official) | M–L | Namespaces + partial classes, `using` statements |
 | `lang-rust` | `.rs` | `tree-sitter-rust` (official) | M | `mod.rs` + `super::` + `crate::`, traits as edges |
-
-### 6.2 Tier — C-family
-
-C and C++ are scheduled together because they share the header-resolution problem and
-benefit from a common `#include` resolver.
-
-| Plugin id | Extensions | Tree-sitter grammar | Effort | Notes |
-|---|---|---|---|---|
-| `lang-c` | `.c`, `.h` | `tree-sitter-c` (official) | M | Header inclusion graph; often coexists with C++ |
-| `lang-cpp` | `.cpp`, `.cc`, `.cxx`, `.hpp`, `.h++` | `tree-sitter-cpp` (official) | L | Header/source split, namespaces, templates |
 
 ### 6.3 Tier — DevOps & IaC
 
@@ -335,7 +343,6 @@ Specialised but recurring across enterprise codebases. All Archetype A or A-simp
 
 | Plugin id | Extensions | Tree-sitter grammar | Effort | Notes |
 |---|---|---|---|---|
-| `lang-sql` | `.sql` | `tree-sitter-sql` (multiple) | M | Tables / views / procedures + cross-references |
 | `lang-graphql` | `.graphql`, `.gql` | `tree-sitter-graphql` | S | Type definitions, queries |
 | `lang-lua` | `.lua` | `tree-sitter-lua` | S–M | Embedded scripting (Neovim, game engines) |
 
@@ -345,7 +352,6 @@ Archetype B / C plugins that complement the existing diagram coverage. All effor
 
 | Plugin id | Extensions | Strategy | Archetype | Notes |
 |---|---|---|---|---|
-| `lang-mermaid` | `.mmd`, `.mermaid` (also fenced in Markdown) | regex | B | |
 | `lang-asciidoc` | `.adoc`, `.asciidoc` | regex / `tree-sitter-asciidoc` | doc | |
 | `lang-org` | `.org` | regex / `tree-sitter-org` | doc | |
 | `lang-dbml` | `.dbml` | regex | B | |

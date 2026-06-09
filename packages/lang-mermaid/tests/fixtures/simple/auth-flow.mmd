@@ -1,0 +1,13 @@
+---
+title: Login flow
+---
+flowchart TD
+    Start([User opens app]) --> Login{Logged in?}
+    Login -->|yes| Home[Home page]
+    Login -->|no| LoginForm[Login form]
+    LoginForm -->|submit| Auth{Credentials OK?}
+    Auth -->|yes| Home
+    Auth -->|no| LoginForm
+
+    classDef happy fill:#dfd
+    class Home,Start happy

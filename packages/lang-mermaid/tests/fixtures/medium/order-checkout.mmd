@@ -1,0 +1,36 @@
+%%{init: {"theme": "neutral"}}%%
+sequenceDiagram
+    title Order checkout — payment + fulfilment
+    autonumber
+
+    actor "Customer" as Cust
+    participant "Web UI" as UI
+    participant "Order API" as API
+    participant "Payment Gateway" as PSP
+    participant "Inventory" as INV
+    participant "Postgres" as DB
+
+    Cust->>UI: place order
+    UI->>+API: POST /orders
+    API->>+DB: BEGIN
+    API->>+INV: reserve(items)
+    INV-->>-API: reserved
+
+    alt payment authorised
+        API->>+PSP: authorize(amount)
+        PSP-->>-API: approved(authId)
+        API->>DB: INSERT order
+        API->>DB: COMMIT
+        API-->>UI: 201 Created
+    else payment declined
+        PSP-->>API: declined
+        API->>INV: release(items)
+        API->>DB: ROLLBACK
+        API-->>UI: 402 Payment Required
+    end
+
+    deactivate DB
+    deactivate API
+    UI-->>Cust: show receipt
+
+    Note right of API: Idempotency key on the<br/>POST /orders endpoint<br/>guards against retries.
