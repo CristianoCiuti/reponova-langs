@@ -16,7 +16,7 @@ describe("@reponova/lang-mermaid plugin", () => {
     expect(plugin.fileType).toBe("mermaid");
     expect(plugin.extractor).toBeInstanceOf(MermaidExtractor);
     expect(plugin.grammarPath).toBeUndefined();
-    expect(plugin.configDefaults).toEqual({ parse: true });
+    expect(plugin.configDefaults).toBeUndefined();
   });
 
   it("declares extensions in its manifest (authoritative source)", () => {

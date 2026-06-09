@@ -10,7 +10,6 @@ import { SqlExtractor } from "./extractor.js";
 export const plugin: LanguagePlugin = {
   id: "sql",
   fileType: "sql",
-  configDefaults: { parse: true },
   extractor: new SqlExtractor(),
 };
 

@@ -32,7 +32,6 @@ In `reponova.yml`:
 plugins:
   plantuml:
     enabled: true       # default: true
-    parse: true         # default: true — parse PlantUML content to extract symbols
     # patterns: []      # override global patterns for PlantUML files
     # exclude: []       # override global exclude for PlantUML files
 ```
@@ -40,7 +39,6 @@ plugins:
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `enabled` | boolean | `true` | Enable/disable PlantUML file detection and extraction |
-| `parse` | boolean | `true` | Parse PlantUML content to extract symbols and relationships |
 | `patterns` | string[] | `[]` | Glob patterns to override global file matching for this plugin |
 | `exclude` | string[] | `[]` | Glob patterns to override global exclusions for this plugin |
 

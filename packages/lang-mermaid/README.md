@@ -48,7 +48,6 @@ In `reponova.yml`:
 plugins:
   mermaid:
     enabled: true       # default: true
-    parse: true         # default: true — parse Mermaid content to extract symbols
     # patterns: []      # override global patterns for Mermaid files
     # exclude: []       # override global exclude for Mermaid files
 ```
@@ -56,7 +55,6 @@ plugins:
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `enabled` | boolean | `true` | Enable/disable Mermaid file detection and extraction |
-| `parse` | boolean | `true` | Parse Mermaid content to extract symbols and relationships |
 | `patterns` | string[] | `[]` | Glob patterns to override global file matching for this plugin |
 | `exclude` | string[] | `[]` | Glob patterns to override global exclusions for this plugin |
 
