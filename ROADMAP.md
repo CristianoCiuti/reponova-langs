@@ -290,7 +290,7 @@ quickly, then absorb the heavier import-resolution work last. C and C++ stay pai
 | Plugin id | Extensions | Strategy | Archetype | Effort | Notes |
 |---|---|---|---|---|---|
 | `lang-mermaid` | `.mmd`, `.mermaid` (also fenced in Markdown) | regex | B | S | Companion to `lang-plantuml`; flowchart / sequence / class / state / ER / C4 diagram families |
-| `lang-sql` | `.sql` | `tree-sitter-sql` (community) | A | M | Tables / views / procedures + cross-references; multi-dialect tolerance |
+| `lang-sql` | `.sql`, `.ddl`, `.dml`, `.psql`, `.pgsql`, `.tsql` | regex (DDL-focused) | B | M | Tables / views / functions / procedures / triggers / indexes / sequences / types + FK & query refs; multi-dialect (PostgreSQL, MySQL, SQLite, T-SQL, BigQuery). Pivoted to regex because no pre-built `tree-sitter-sql.wasm` is available upstream and the DDL surface RepoNova consumes is well-bounded. |
 | `lang-java` | `.java` | `tree-sitter-java` (official) | A | M–L | Complex imports, generics, package → directory mapping |
 | `lang-c` | `.c`, `.h` | `tree-sitter-c` (official) | A | M | Header inclusion graph; pair with C++ |
 | `lang-cpp` | `.cpp`, `.cc`, `.cxx`, `.hpp`, `.h++` | `tree-sitter-cpp` (official) | A | L | Header/source split, namespaces, templates; reuses the C `#include` resolver |

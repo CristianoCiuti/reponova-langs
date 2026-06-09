@@ -109,6 +109,15 @@ importers:
         specifier: ^0.25.10
         version: 0.25.10
 
+  packages/lang-sql:
+    devDependencies:
+      '@reponova/lang-test-utils':
+        specifier: workspace:*
+        version: link:../lang-test-utils
+      reponova:
+        specifier: ^0.6.0
+        version: 0.6.0(apache-arrow@18.1.0)(typescript@5.9.3)
+
   packages/lang-svg:
     devDependencies:
       '@reponova/lang-test-utils':
