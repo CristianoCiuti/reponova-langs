@@ -15,6 +15,7 @@ Each plugin extends RepoNova's knowledge graph with support for a specific langu
 | [`@reponova/lang-json`](./packages/lang-json) | JSON / JSONC with schema-aware extraction for `package.json`, `tsconfig*`, `nx.json`, `project.json`, `lerna.json`, `turbo.json` (jsonc-parser) | Published |
 | [`@reponova/lang-plantuml`](./packages/lang-plantuml) | PlantUML diagrams (`.puml` / `.plantuml`, regex) | Published |
 | [`@reponova/lang-mermaid`](./packages/lang-mermaid) | Mermaid diagrams (`.mmd` / `.mermaid`, regex) — 13+ diagram families incl. flowchart, sequence, class, state, ER, gantt, journey, gitGraph, pie, mindmap, timeline, C4, requirement, zenuml | Published |
+| [`@reponova/lang-sql`](./packages/lang-sql) | SQL DDL (`.sql` / `.ddl` / `.dml` / `.psql` / `.pgsql` / `.tsql`, regex) — multi-dialect (PostgreSQL, MySQL, SQLite, T-SQL, BigQuery) tables / views / functions / procedures / triggers / indexes / sequences / types + FK & query refs | Published |
 | [`@reponova/lang-svg`](./packages/lang-svg) | SVG assets (`.svg`, regex) | Published |
 
 ## Install a plugin in your RepoNova project
@@ -37,6 +38,7 @@ reponova lang add @reponova/lang-tsx
 reponova lang add @reponova/lang-json
 reponova lang add @reponova/lang-plantuml
 reponova lang add @reponova/lang-mermaid
+reponova lang add @reponova/lang-sql
 reponova lang add @reponova/lang-svg
 ```
 
