@@ -131,8 +131,8 @@ importers:
         specifier: workspace:*
         version: link:../lang-test-utils
       reponova:
-        specifier: ^0.6.0
-        version: 0.6.0(apache-arrow@18.1.0)(typescript@5.9.3)
+        specifier: ^0.7.0
+        version: 0.7.0(apache-arrow@18.1.0)(typescript@5.9.3)
 
   packages/lang-mermaid:
     devDependencies:
@@ -2705,6 +2705,11 @@ packages:
 
   reponova@0.6.0:
     resolution: {integrity: sha512-m4X2J/UT1zCOqsv+RXOi4HaKLx4lGosvJICjhmfLZT9pfEKUJNQJLIVG8V8klxOWZlim91R3KqkMHnr2A9gC2A==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  reponova@0.7.0:
+    resolution: {integrity: sha512-t/eRhxth17WaLOrIPAWne2edyGJ6ojp8lq8Kt233CcgsTO3pefC1oZdpYQa39D0LzeBArzl9GnYyRbOiHv4ntQ==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -5657,6 +5662,36 @@ snapshots:
       - typescript
 
   reponova@0.6.0(apache-arrow@18.1.0)(typescript@5.9.3):
+    dependencies:
+      '@inquirer/checkbox': 3.0.1
+      '@inquirer/confirm': 4.0.1
+      '@modelcontextprotocol/sdk': 1.29.0(zod@3.25.76)
+      global-directory: 4.0.1
+      graphology: 0.26.0(graphology-types@0.24.8)
+      graphology-communities-louvain: 2.0.2(graphology-types@0.24.8)
+      graphology-layout-forceatlas2: 0.10.1(graphology-types@0.24.8)
+      graphology-types: 0.24.8
+      js-tiktoken: 1.0.21
+      jsonc-parser: 3.3.1
+      picomatch: 4.0.4
+      sql.js: 1.14.1
+      undici: 8.3.0
+      web-tree-sitter: 0.25.10
+      yaml: 2.9.0
+      yargs: 17.7.2
+      zod: 3.25.76
+    optionalDependencies:
+      '@lancedb/lancedb': 0.27.2(apache-arrow@18.1.0)
+      node-llama-cpp: 3.18.1(typescript@5.9.3)
+      onnxruntime-node: 1.26.0
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - '@types/emscripten'
+      - apache-arrow
+      - supports-color
+      - typescript
+
+  reponova@0.7.0(apache-arrow@18.1.0)(typescript@5.9.3):
     dependencies:
       '@inquirer/checkbox': 3.0.1
       '@inquirer/confirm': 4.0.1
