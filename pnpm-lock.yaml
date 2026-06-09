@@ -79,6 +79,15 @@ importers:
         specifier: ^0.6.0
         version: 0.6.0(apache-arrow@18.1.0)(typescript@5.9.3)
 
+  packages/lang-mermaid:
+    devDependencies:
+      '@reponova/lang-test-utils':
+        specifier: workspace:*
+        version: link:../lang-test-utils
+      reponova:
+        specifier: ^0.6.0
+        version: 0.6.0(apache-arrow@18.1.0)(typescript@5.9.3)
+
   packages/lang-plantuml:
     devDependencies:
       '@reponova/lang-test-utils':
