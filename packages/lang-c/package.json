@@ -44,6 +44,7 @@
     "reponova": "^0.6.0"
   },
   "devDependencies": {
+    "@reponova/lang-c-core": "workspace:*",
     "@reponova/lang-test-utils": "workspace:*",
     "reponova": "^0.6.0",
     "web-tree-sitter": "^0.25.10"

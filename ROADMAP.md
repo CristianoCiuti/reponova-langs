@@ -96,6 +96,7 @@ reponova-langs/
     lang-<id>/             # one published @reponova/lang-* per language or asset type
     lang-test-utils/       # internal: shared test helpers (private)
     lang-typescript-core/  # internal: shared TS/JS/TSX extractor core (private)
+    lang-c-core/           # internal: shared C/C++ extractor core (private)
   tools/
     scaffold/              # internal: `pnpm scaffold lang-<id>`
     grammar-fetcher/       # internal: pinned download + SHA-256 verify
@@ -108,8 +109,8 @@ reponova-langs/
 ```
 
 `packages/*` and `tools/*` are pnpm workspaces. Internal packages (`scaffold`, `lang-test-utils`,
-`lang-typescript-core`, `grammar-fetcher`, `trust-configure`, `bootstrap-plugin`) are
-`"private": true` and never published.
+`lang-typescript-core`, `lang-c-core`, `grammar-fetcher`, `trust-configure`, `bootstrap-plugin`)
+are `"private": true` and never published.
 
 ### 2.4 Grammar pipeline
 
@@ -292,8 +293,8 @@ quickly, then absorb the heavier import-resolution work last. C and C++ stay pai
 | `lang-mermaid` | `.mmd`, `.mermaid` (also fenced in Markdown) | regex | B | S | Companion to `lang-plantuml`; flowchart / sequence / class / state / ER / C4 diagram families |
 | `lang-sql` | `.sql`, `.ddl`, `.dml`, `.psql`, `.pgsql`, `.tsql` | regex (DDL-focused) | B | M | Tables / views / functions / procedures / triggers / indexes / sequences / types + FK & query refs; multi-dialect (PostgreSQL, MySQL, SQLite, T-SQL, BigQuery). Pivoted to regex because no pre-built `tree-sitter-sql.wasm` is available upstream and the DDL surface RepoNova consumes is well-bounded. |
 | `lang-java` | `.java` | `tree-sitter-java` (official) | A | M–L | Complex imports, generics, package → directory mapping |
-| `lang-c` | `.c`, `.h` | `tree-sitter-c` (official) | A | M | Header inclusion graph; functions / structs / unions / enums / typedefs / macros + globals; walks `#ifdef` guards and `extern "C"` blocks. Inline `#include` resolver (relative + repo-root candidates) — will be refactored into `lang-c-core` when paired with C++ |
-| `lang-cpp` | `.cpp`, `.cc`, `.cxx`, `.hpp`, `.h++` | `tree-sitter-cpp` (official) | A | L | Header/source split, namespaces, templates; reuses the C `#include` resolver |
+| `lang-c` | `.c`, `.h` | `tree-sitter-c` (official) | A | M | Header inclusion graph; functions / structs / unions / enums / typedefs / macros + globals; walks `#ifdef` guards and `extern "C"` blocks. All extraction logic lives in workspace-internal `@reponova/lang-c-core` (shared with `lang-cpp`) and is inlined via `tsup --noExternal`. |
+| `lang-cpp` | `.cpp`, `.cc`, `.cxx`, `.hpp`, `.h++` | `tree-sitter-cpp` (official) | A | L | Header/source split, namespaces, classes (access modifiers + bases), templates, ctors / dtors, `using`. Subclasses `CFamilyExtractor` from `@reponova/lang-c-core` and adds C++-specific dispatch on top of the C subset. |
 
 ### 6.2 Tier — Enterprise & systems
 
@@ -367,7 +368,7 @@ These principles guide the suite over the long run; they apply to every tier.
 - **Independence at publish time, integration at dev time** — every plugin is published
   independently, but the monorepo allows cross-plugin refactors in a single PR (e.g.
   `lang-typescript`, `lang-tsx`, and `lang-javascript` all share `lang-typescript-core`
-  internally).
+  internally; `lang-c` and `lang-cpp` share `lang-c-core`).
 - **Quality gates are non-negotiable** — coverage and bundle-size thresholds are global
   rules, not per-plugin opt-ins. If a plugin needs a higher size budget (e.g. a particularly
   large grammar), the threshold is raised explicitly and reviewed.

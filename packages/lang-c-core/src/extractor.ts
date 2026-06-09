@@ -1,20 +1,25 @@
 /**
- * C language extractor.
+ * C-family language extractor (C and C++ shared base).
  *
  * Extracts top-level functions, function declarations (`extern`), struct
  * / union / enum definitions and their members, typedefs, object-like
  * and function-like macros, global variables, plus their `#include`
- * imports and intra-function call references from C source via
+ * imports and intra-function call references from C/C++ source via
  * tree-sitter AST parsing.
  *
- * C has no namespaces, so qualified names are derived from the file
- * path (POSIX dirs joined by `.`), mirroring `lang-python`. For
- * `src/util.c`:
+ * Qualified names are derived from the file path (POSIX dirs joined by
+ * `.`), mirroring `lang-python`. For `src/util.c`:
  *   - module = `src.util`
  *   - `add` (function)              → qualifiedName `src.util.add`
  *   - `Point` (struct)              → qualifiedName `src.util.Point`
  *   - `Point.x` (field)             → qualifiedName `src.util.Point.x`
  *   - `Color.RED` (enum constant)   → qualifiedName `src.util.Color.RED`
+ *
+ * The extractor exposes a `scope` parameter on every dispatch / extract
+ * method that defaults to the file's module name. C++ subclasses
+ * extend the scope when walking into `namespace_definition` nodes
+ * (`module + ".ns1.ns2"`) so symbols emitted from inside a namespace
+ * carry the correct qualified path.
  *
  * `#include "x.h"` is treated as a wildcard import (every public symbol
  * in the included header is brought into scope). `#include <x.h>` is
@@ -34,7 +39,11 @@ import type {
   SymbolReference,
 } from "reponova";
 
-type SymbolKind =
+/**
+ * Symbol kinds emitted by the C-family extractor. Aligned with the
+ * conventional `SymbolKind` strings the graph builder recognises.
+ */
+export type CFamilyKind =
   | "function"
   | "class"
   | "method"
@@ -45,12 +54,11 @@ type SymbolKind =
   | "module";
 
 /**
- * Top-level node types we descend into for symbol extraction.
- * Anything outside this set is either preprocessor noise we already
- * handle (`preproc_include`, `preproc_def`, `preproc_function_def`) or
- * unrelated to graph nodes (e.g. `comment`, attribute specifiers).
+ * Top-level node types we descend into for symbol extraction in pure C.
+ * C++ subclasses extend this set in their own `TOP_LEVEL_DECLARATIONS`
+ * (or simply via their `dispatchTopLevel` override).
  */
-const TOP_LEVEL_DECLARATIONS = new Set([
+export const C_TOP_LEVEL_DECLARATIONS: ReadonlySet<string> = new Set([
   "function_definition",
   "declaration",
   "struct_specifier",
@@ -64,16 +72,16 @@ const TOP_LEVEL_DECLARATIONS = new Set([
 
 /**
  * Container nodes we recurse through transparently when scanning for
- * top-level declarations. C headers commonly bury everything inside a
- * `#ifndef HEADER_H ... #endif` guard plus an `extern "C" { ... }`
- * block, and platform-specific declarations live in `#if defined(...)`
+ * top-level declarations. C/C++ headers commonly bury everything inside
+ * `#ifndef HEADER_H ... #endif` guards plus `extern "C" { ... }`
+ * blocks, and platform-specific declarations live in `#if defined(...)`
  * branches. We surface declarations from every branch (including
  * `preproc_else` and `preproc_elif`) so the graph reflects the
  * combined public surface a downstream consumer might see across
  * different build configurations — under-extraction here is far
  * costlier than over-extraction.
  */
-const PREPROC_CONDITIONAL_CONTAINERS = new Set([
+export const PREPROC_CONDITIONAL_CONTAINERS: ReadonlySet<string> = new Set([
   "preproc_ifdef",
   "preproc_if",
   "preproc_else",
@@ -82,10 +90,36 @@ const PREPROC_CONDITIONAL_CONTAINERS = new Set([
   "preproc_elifndef",
 ]);
 
-export class CExtractor implements LanguageExtractor {
-  readonly languageId = "c";
-  readonly extensions = [".c", ".h"];
-  readonly wasmFile = "tree-sitter-c.wasm";
+/** Constructor options for `CFamilyExtractor`. */
+export interface CFamilyExtractorOptions {
+  /** Language id (e.g. `"c"`, `"cpp"`). */
+  languageId: string;
+  /** File extensions handled by the parent plugin (e.g. `[".c", ".h"]`). */
+  extensions: readonly string[];
+  /** WASM grammar filename used by the parent plugin. */
+  wasmFile: string;
+}
+
+/**
+ * Shared `LanguageExtractor` for the C family.
+ *
+ * Most methods are `protected` so C++ subclasses can extend or
+ * override individual extraction stages. The default `dispatchTopLevel`
+ * handles the C subset (functions, structs, unions, enums, typedefs,
+ * macros, globals, includes). Subclasses add C++-specific cases
+ * (`namespace_definition`, `class_specifier`, `template_declaration`,
+ * `using_declaration`, …) and chain back via `super.dispatchTopLevel`.
+ */
+export class CFamilyExtractor implements LanguageExtractor {
+  readonly languageId: string;
+  readonly extensions: string[];
+  readonly wasmFile: string;
+
+  constructor(opts: CFamilyExtractorOptions) {
+    this.languageId = opts.languageId;
+    this.extensions = [...opts.extensions];
+    this.wasmFile = opts.wasmFile;
+  }
 
   extract(tree: SyntaxTree, _sourceCode: string, filePath: string): FileExtraction {
     const symbols: SymbolNode[] = [];
@@ -103,11 +137,19 @@ export class CExtractor implements LanguageExtractor {
     };
 
     this.walkTopLevel(tree.rootNode, (node) => {
-      this.dispatchTopLevel(node, symbols, references, imports, moduleName);
+      this.dispatchTopLevel(node, symbols, references, imports, moduleName, moduleName);
     });
 
     const exports = this.computeExports(symbols, moduleName);
-    return { filePath, language: "c", fileNode, symbols, imports, references, exports };
+    return {
+      filePath,
+      language: this.languageId,
+      fileNode,
+      symbols,
+      imports,
+      references,
+      exports,
+    };
   }
 
   /**
@@ -133,20 +175,7 @@ export class CExtractor implements LanguageExtractor {
    * include search paths are a graph-builder concern.
    */
   resolveImportPath(importModule: string, currentFilePath: string): string[] {
-    if (!importModule) return [];
-    // System include — `module` keeps the literal `<…>` text. We can't
-    // resolve these without a system include path catalogue.
-    if (importModule.startsWith("<") && importModule.endsWith(">")) return [];
-
-    const normalized = importModule.replace(/\\/g, "/");
-    const fileDir = posixDirname(currentFilePath.replace(/\\/g, "/"));
-    const relative = posixJoin(fileDir, normalized);
-
-    const candidates: string[] = [];
-    if (relative) candidates.push(relative);
-    if (normalized && normalized !== relative) candidates.push(normalized);
-    // Dedupe while preserving order.
-    return Array.from(new Set(candidates));
+    return resolveCInclude(importModule, currentFilePath);
   }
 
   // ─── Top-level dispatch ──────────────────────────────────────────────────
@@ -160,11 +189,17 @@ export class CExtractor implements LanguageExtractor {
    * a `#ifndef HEADER_H ... #endif` guard or `#if defined(...)`
    * platform branch without duplicating dispatch logic at each call
    * site.
+   *
+   * The `isLeaf` predicate decides whether a node should be passed to
+   * `action` or descended through. The default (`isCLeaf`) matches the
+   * C subset; subclasses can override `topLevelLeafTypes` to include
+   * additional node types (`namespace_definition`, `class_specifier`,
+   * `template_declaration`, …) for C++.
    */
-  private walkTopLevel(node: SyntaxNode, action: (stmt: SyntaxNode) => void): void {
+  protected walkTopLevel(node: SyntaxNode, action: (stmt: SyntaxNode) => void): void {
+    const leafTypes = this.topLevelLeafTypes();
     for (const child of node.namedChildren) {
       if (child.type === "linkage_specification") {
-        // Body is usually a `declaration_list`. Recurse into it.
         const body = child.namedChildren.find(
           (c) => c.type === "declaration_list" || c.type === "compound_statement",
         );
@@ -183,51 +218,69 @@ export class CExtractor implements LanguageExtractor {
         this.walkTopLevel(child, action);
         continue;
       }
-      if (TOP_LEVEL_DECLARATIONS.has(child.type) || child.type === "comment") {
+      if (leafTypes.has(child.type) || child.type === "comment") {
         action(child);
       }
     }
   }
 
-  private dispatchTopLevel(
+  /**
+   * Return the set of node types that should be treated as terminal
+   * top-level statements by `walkTopLevel`. Subclasses can override to
+   * extend the recognised vocabulary (e.g. add `namespace_definition`,
+   * `class_specifier`, `template_declaration` for C++).
+   */
+  protected topLevelLeafTypes(): ReadonlySet<string> {
+    return C_TOP_LEVEL_DECLARATIONS;
+  }
+
+  /**
+   * Dispatch a single top-level node to the appropriate extract
+   * method.  `scope` is the current containing scope's qualified name
+   * (defaults to `moduleName` for plain C files; C++ subclasses extend
+   * it through `namespace_definition` recursion). `moduleName` is the
+   * file-derived module name — only `computeExports` uses it separately.
+   */
+  protected dispatchTopLevel(
     node: SyntaxNode,
     symbols: SymbolNode[],
     references: SymbolReference[],
     imports: ImportDeclaration[],
-    moduleName: string,
+    scope: string,
+    _moduleName: string,
   ): void {
     switch (node.type) {
       case "preproc_include":
         imports.push(this.extractInclude(node));
         return;
       case "preproc_def":
-        this.extractObjectMacro(node, symbols, moduleName);
+        this.extractObjectMacro(node, symbols, scope);
         return;
       case "preproc_function_def":
-        this.extractFunctionMacro(node, symbols, moduleName);
+        this.extractFunctionMacro(node, symbols, scope);
         return;
       case "function_definition":
-        this.extractFunctionDefinition(node, symbols, references, moduleName);
+        this.extractFunctionDefinition(node, symbols, references, scope);
         return;
       case "declaration":
-        this.extractDeclaration(node, symbols, moduleName);
+        this.extractDeclaration(node, symbols, scope);
         return;
       case "struct_specifier":
       case "union_specifier":
-        this.extractRecord(node, symbols, moduleName, undefined);
+        this.extractRecord(node, symbols, scope, undefined);
         return;
       case "enum_specifier":
-        this.extractEnum(node, symbols, moduleName, undefined);
+        this.extractEnum(node, symbols, scope, undefined);
         return;
       case "type_definition":
-        this.extractTypedef(node, symbols, moduleName);
+        this.extractTypedef(node, symbols, scope);
         return;
     }
   }
 
   // ─── Includes ───────────────────────────────────────────────────────────
 
-  private extractInclude(node: SyntaxNode): ImportDeclaration {
+  protected extractInclude(node: SyntaxNode): ImportDeclaration {
     const pathNode = node.childForFieldName("path");
     let modulePath = "";
     if (pathNode) {
@@ -252,10 +305,10 @@ export class CExtractor implements LanguageExtractor {
 
   // ─── Macros ─────────────────────────────────────────────────────────────
 
-  private extractObjectMacro(
+  protected extractObjectMacro(
     node: SyntaxNode,
     symbols: SymbolNode[],
-    moduleName: string,
+    scope: string,
   ): void {
     const nameNode = node.childForFieldName("name");
     if (!nameNode) return;
@@ -265,7 +318,7 @@ export class CExtractor implements LanguageExtractor {
     const docstring = this.extractDeclarationDocstring(node);
     symbols.push({
       name,
-      qualifiedName: `${moduleName}.${name}`,
+      qualifiedName: `${scope}.${name}`,
       kind: "constant",
       signature: valueText ? `${name} = ${truncate(valueText, 80)}` : name,
       decorators: ["macro"],
@@ -275,10 +328,10 @@ export class CExtractor implements LanguageExtractor {
     });
   }
 
-  private extractFunctionMacro(
+  protected extractFunctionMacro(
     node: SyntaxNode,
     symbols: SymbolNode[],
-    moduleName: string,
+    scope: string,
   ): void {
     const nameNode = node.childForFieldName("name");
     if (!nameNode) return;
@@ -288,7 +341,7 @@ export class CExtractor implements LanguageExtractor {
     const docstring = this.extractDeclarationDocstring(node);
     symbols.push({
       name,
-      qualifiedName: `${moduleName}.${name}`,
+      qualifiedName: `${scope}.${name}`,
       kind: "function",
       signature: `${name}${params}`,
       decorators: ["macro", "function_like"],
@@ -300,11 +353,11 @@ export class CExtractor implements LanguageExtractor {
 
   // ─── Functions ──────────────────────────────────────────────────────────
 
-  private extractFunctionDefinition(
+  protected extractFunctionDefinition(
     node: SyntaxNode,
     symbols: SymbolNode[],
     references: SymbolReference[],
-    moduleName: string,
+    scope: string,
   ): void {
     const declarator = node.childForFieldName("declarator");
     if (!declarator) return;
@@ -321,7 +374,7 @@ export class CExtractor implements LanguageExtractor {
 
     const docstring = this.extractDeclarationDocstring(node);
     const calls = this.extractCalls(node);
-    const qualifiedName = `${moduleName}.${name}`;
+    const qualifiedName = `${scope}.${name}`;
 
     symbols.push({
       name,
@@ -356,19 +409,19 @@ export class CExtractor implements LanguageExtractor {
    * surface the record itself as a top-level record symbol AND the
    * variable as a global; we recursively recurse so both are extracted.
    */
-  private extractDeclaration(
+  protected extractDeclaration(
     node: SyntaxNode,
     symbols: SymbolNode[],
-    moduleName: string,
+    scope: string,
   ): void {
     // Detect an inline record/enum specifier in the declaration's `type`
     // field and emit it as its own top-level symbol first.
     const typeNode = node.childForFieldName("type");
     if (typeNode) {
       if (typeNode.type === "struct_specifier" || typeNode.type === "union_specifier") {
-        this.extractRecord(typeNode, symbols, moduleName, undefined);
+        this.extractRecord(typeNode, symbols, scope, undefined);
       } else if (typeNode.type === "enum_specifier") {
-        this.extractEnum(typeNode, symbols, moduleName, undefined);
+        this.extractEnum(typeNode, symbols, scope, undefined);
       }
     }
 
@@ -392,7 +445,7 @@ export class CExtractor implements LanguageExtractor {
         const docstring = this.extractDeclarationDocstring(node);
         symbols.push({
           name,
-          qualifiedName: `${moduleName}.${name}`,
+          qualifiedName: `${scope}.${name}`,
           kind: "function",
           signature,
           decorators,
@@ -408,7 +461,7 @@ export class CExtractor implements LanguageExtractor {
     // declarators are possible (`int a, b = 2;`).
     const modifiers = collectStorageAndQualifierKeywords(node);
     const isConst = modifiers.includes("const");
-    const kind: SymbolKind = isConst ? "constant" : "variable";
+    const kind: CFamilyKind = isConst ? "constant" : "variable";
     const typeText = typeNode ? typeNode.text : "";
     const docstring = this.extractDeclarationDocstring(node);
 
@@ -428,7 +481,7 @@ export class CExtractor implements LanguageExtractor {
       if (!name) continue;
       symbols.push({
         name,
-        qualifiedName: `${moduleName}.${name}`,
+        qualifiedName: `${scope}.${name}`,
         kind,
         signature: typeText ? `${name}: ${typeText}` : name,
         decorators: [...modifiers],
@@ -448,10 +501,10 @@ export class CExtractor implements LanguageExtractor {
    * surfaced — the enclosing declaration emits them as scalar globals
    * via the regular declaration path.
    */
-  private extractRecord(
+  protected extractRecord(
     node: SyntaxNode,
     symbols: SymbolNode[],
-    moduleName: string,
+    scope: string,
     parentTypedef: string | undefined,
   ): void {
     const nameNode = node.childForFieldName("name");
@@ -461,8 +514,8 @@ export class CExtractor implements LanguageExtractor {
       return;
     }
     const name = nameNode ? nameNode.text : parentTypedef!;
-    const qualifiedName = `${moduleName}.${name}`;
-    const kind: SymbolKind = "class";
+    const qualifiedName = `${scope}.${name}`;
+    const kind: CFamilyKind = "class";
     const decorators = [node.type === "union_specifier" ? "union" : "struct"];
     const docstring = this.extractDeclarationDocstring(node);
 
@@ -482,7 +535,7 @@ export class CExtractor implements LanguageExtractor {
     }
   }
 
-  private extractRecordFields(
+  protected extractRecordFields(
     body: SyntaxNode,
     symbols: SymbolNode[],
     parentQualifiedName: string,
@@ -521,17 +574,17 @@ export class CExtractor implements LanguageExtractor {
 
   // ─── Enums ──────────────────────────────────────────────────────────────
 
-  private extractEnum(
+  protected extractEnum(
     node: SyntaxNode,
     symbols: SymbolNode[],
-    moduleName: string,
+    scope: string,
     parentTypedef: string | undefined,
   ): void {
     const nameNode = node.childForFieldName("name");
     const body = node.childForFieldName("body");
     if (!nameNode && !parentTypedef) return;
     const name = nameNode ? nameNode.text : parentTypedef!;
-    const qualifiedName = `${moduleName}.${name}`;
+    const qualifiedName = `${scope}.${name}`;
     const docstring = this.extractDeclarationDocstring(node);
 
     if (!body) return;
@@ -574,10 +627,10 @@ export class CExtractor implements LanguageExtractor {
    * (`typedef int counter_t;` or `typedef int (*cb_t)(int);`) we emit
    * only the alias.
    */
-  private extractTypedef(
+  protected extractTypedef(
     node: SyntaxNode,
     symbols: SymbolNode[],
-    moduleName: string,
+    scope: string,
   ): void {
     const typeNode = node.childForFieldName("type");
     // The typedef may have multiple aliases (`typedef int A, B;`), but
@@ -604,9 +657,9 @@ export class CExtractor implements LanguageExtractor {
     // alias name as identity and emit the record/enum first.
     if (typeNode) {
       if (typeNode.type === "struct_specifier" || typeNode.type === "union_specifier") {
-        this.extractRecord(typeNode, symbols, moduleName, aliasNames[0]);
+        this.extractRecord(typeNode, symbols, scope, aliasNames[0]);
       } else if (typeNode.type === "enum_specifier") {
-        this.extractEnum(typeNode, symbols, moduleName, aliasNames[0]);
+        this.extractEnum(typeNode, symbols, scope, aliasNames[0]);
       }
     }
 
@@ -615,7 +668,7 @@ export class CExtractor implements LanguageExtractor {
     for (const alias of aliasNames) {
       symbols.push({
         name: alias,
-        qualifiedName: `${moduleName}.${alias}`,
+        qualifiedName: `${scope}.${alias}`,
         kind: "type",
         signature: typeText ? `${alias} = ${truncate(typeText, 100)}` : alias,
         decorators: ["typedef"],
@@ -638,7 +691,7 @@ export class CExtractor implements LanguageExtractor {
    * Duplicates are folded into a single edge per call site to keep the
    * graph stable.
    */
-  private extractCalls(funcDef: SyntaxNode): string[] {
+  protected extractCalls(funcDef: SyntaxNode): string[] {
     const calls: string[] = [];
     const seen = new Set<string>();
     const body = funcDef.childForFieldName("body");
@@ -673,7 +726,7 @@ export class CExtractor implements LanguageExtractor {
    * wrapper for every `parent.namedChildren` access, so we locate the
    * declaration by `startPosition` instead of by reference equality.
    */
-  private extractDeclarationDocstring(node: SyntaxNode): string | undefined {
+  protected extractDeclarationDocstring(node: SyntaxNode): string | undefined {
     const parent = node.parent;
     if (!parent) return undefined;
     const siblings = parent.namedChildren;
@@ -717,7 +770,8 @@ export class CExtractor implements LanguageExtractor {
    * guards (`#ifndef HEADER_H`) live inside an inert preproc cascade
    * that doesn't interfere — we simply scan top-level `comment` nodes.
    */
-  private extractFileDocstring(root: SyntaxNode): string | undefined {
+  protected extractFileDocstring(root: SyntaxNode): string | undefined {
+    const leafTypes = this.topLevelLeafTypes();
     for (const child of root.namedChildren) {
       if (child.type === "comment") {
         const text = child.text;
@@ -737,7 +791,7 @@ export class CExtractor implements LanguageExtractor {
           return cleanFirstLine(text.replace(/^\/\/+\s?/, ""));
         }
       } else if (
-        TOP_LEVEL_DECLARATIONS.has(child.type) &&
+        leafTypes.has(child.type) &&
         child.type !== "preproc_include" &&
         child.type !== "preproc_def" &&
         child.type !== "preproc_function_def"
@@ -763,10 +817,15 @@ export class CExtractor implements LanguageExtractor {
    *     type-level concepts with no link-level symbol attached),
    *   - members (struct fields, enum constants — visibility is gated
    *     by the parent type).
+   *
+   * C++ symbols inside namespaces are intentionally **excluded** from
+   * the top-level exports list: namespace membership is encoded in
+   * `qualifiedName` and the namespace itself surfaces as its own
+   * top-level symbol — the consumer can walk through it.
    */
-  private computeExports(symbols: SymbolNode[], moduleName: string): string[] {
+  protected computeExports(symbols: SymbolNode[], moduleName: string): string[] {
     const prefix = `${moduleName}.`;
-    const LINKABLE_KINDS: ReadonlySet<SymbolKind> = new Set([
+    const LINKABLE_KINDS: ReadonlySet<CFamilyKind> = new Set([
       "function",
       "variable",
       "constant",
@@ -777,7 +836,7 @@ export class CExtractor implements LanguageExtractor {
         if (!s.qualifiedName.startsWith(prefix)) return false;
         const tail = s.qualifiedName.slice(prefix.length);
         if (tail.includes(".")) return false;
-        if (!LINKABLE_KINDS.has(s.kind as SymbolKind)) return false;
+        if (!LINKABLE_KINDS.has(s.kind as CFamilyKind)) return false;
         if (s.decorators.includes("static")) return false;
         if (s.decorators.includes("declaration")) return false;
         if (s.decorators.includes("extern")) return false;
@@ -788,7 +847,30 @@ export class CExtractor implements LanguageExtractor {
   }
 }
 
-// ─── Free helpers ─────────────────────────────────────────────────────────
+// ─── Public utilities ─────────────────────────────────────────────────────
+
+/**
+ * Resolve a `#include` path to candidate file paths relative to repo
+ * root. Exposed as a free function so non-extractor callers (graph
+ * builders, scripts, the C++ subclass) can use the same semantics
+ * without instantiating an extractor.
+ */
+export function resolveCInclude(importModule: string, currentFilePath: string): string[] {
+  if (!importModule) return [];
+  // System include — `module` keeps the literal `<…>` text. We can't
+  // resolve these without a system include path catalogue.
+  if (importModule.startsWith("<") && importModule.endsWith(">")) return [];
+
+  const normalized = importModule.replace(/\\/g, "/");
+  const fileDir = posixDirname(currentFilePath.replace(/\\/g, "/"));
+  const relative = posixJoin(fileDir, normalized);
+
+  const candidates: string[] = [];
+  if (relative) candidates.push(relative);
+  if (normalized && normalized !== relative) candidates.push(normalized);
+  // Dedupe while preserving order.
+  return Array.from(new Set(candidates));
+}
 
 /**
  * Find the innermost `function_declarator` inside an arbitrary
@@ -796,7 +878,7 @@ export class CExtractor implements LanguageExtractor {
  * `int (*foo)(void)` — function-pointer declarators are deliberately
  * NOT considered here; only true function declarators are returned).
  */
-function findFunctionDeclarator(declarator: SyntaxNode | null): SyntaxNode | null {
+export function findFunctionDeclarator(declarator: SyntaxNode | null): SyntaxNode | null {
   if (!declarator) return null;
   if (declarator.type === "function_declarator") {
     // Only treat as a function-definition declarator when the inner
@@ -814,7 +896,7 @@ function findFunctionDeclarator(declarator: SyntaxNode | null): SyntaxNode | nul
   return null;
 }
 
-function hasFunctionDeclarator(node: SyntaxNode): boolean {
+export function hasFunctionDeclarator(node: SyntaxNode): boolean {
   if (node.type === "function_declarator") return true;
   if (node.type === "pointer_declarator" || node.type === "array_declarator") {
     const inner = node.childForFieldName("declarator");
@@ -833,7 +915,7 @@ function hasFunctionDeclarator(node: SyntaxNode): boolean {
  * `function_declarator`, `parenthesized_declarator`, and direct
  * `identifier` / `field_identifier` / `type_identifier`.
  */
-function extractDeclaratorName(node: SyntaxNode | null): string | null {
+export function extractDeclaratorName(node: SyntaxNode | null): string | null {
   if (!node) return null;
   switch (node.type) {
     case "identifier":
@@ -861,7 +943,7 @@ function extractDeclaratorName(node: SyntaxNode | null): string | null {
  * `function_definition` (types `storage_class_specifier` and
  * `type_qualifier`). We collect their textual content as decorators.
  */
-function collectStorageAndQualifierKeywords(node: SyntaxNode): string[] {
+export function collectStorageAndQualifierKeywords(node: SyntaxNode): string[] {
   const out: string[] = [];
   for (const child of node.namedChildren) {
     if (child.type === "storage_class_specifier" || child.type === "type_qualifier") {
@@ -881,7 +963,7 @@ function collectStorageAndQualifierKeywords(node: SyntaxNode): string[] {
  * after we normalise `->` to `.`); for anything else we fall back to
  * the raw text trimmed of whitespace.
  */
-function simplifyCallee(node: SyntaxNode): string | null {
+export function simplifyCallee(node: SyntaxNode): string | null {
   switch (node.type) {
     case "identifier":
       return node.text;
@@ -903,13 +985,15 @@ function simplifyCallee(node: SyntaxNode): string | null {
   }
 }
 
-function posixBasename(p: string): string {
+// ─── Path helpers ─────────────────────────────────────────────────────────
+
+export function posixBasename(p: string): string {
   const normalized = p.replace(/\\/g, "/");
   const lastSlash = normalized.lastIndexOf("/");
   return lastSlash === -1 ? normalized : normalized.slice(lastSlash + 1);
 }
 
-function posixDirname(p: string): string {
+export function posixDirname(p: string): string {
   const normalized = p.replace(/\\/g, "/");
   const lastSlash = normalized.lastIndexOf("/");
   return lastSlash === -1 ? "" : normalized.slice(0, lastSlash);
@@ -921,7 +1005,7 @@ function posixDirname(p: string): string {
  * extractor must be deterministic on every platform — Windows
  * `path.join` would emit backslashes.
  */
-function posixJoin(...parts: string[]): string {
+export function posixJoin(...parts: string[]): string {
   const segments: string[] = [];
   for (const part of parts) {
     if (!part) continue;
@@ -948,7 +1032,7 @@ function posixJoin(...parts: string[]): string {
  * dots collapse so `foo..bar.c` (illegal but tolerated) becomes
  * `foo.bar`.
  */
-function filePathToModule(filePath: string): string {
+export function filePathToModule(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/");
   const lastSlash = normalized.lastIndexOf("/");
   const dir = lastSlash === -1 ? "" : normalized.slice(0, lastSlash);
@@ -959,10 +1043,12 @@ function filePathToModule(filePath: string): string {
   return combined.replace(/\.+/g, ".");
 }
 
-function stripStringQuotes(s: string): string {
+export function stripStringQuotes(s: string): string {
   if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) return s.slice(1, -1);
   return s;
 }
+
+// ─── Comment helpers ──────────────────────────────────────────────────────
 
 /**
  * Clean a Doxygen block (`/** … *\/`, `/*! … *\/`) to a single-line
@@ -970,7 +1056,7 @@ function stripStringQuotes(s: string): string {
  * each line, drop empty lines and `@tag`-prefixed lines, and return
  * the first non-empty line truncated to 300 chars.
  */
-function cleanDoxyBlock(raw: string): string | undefined {
+export function cleanDoxyBlock(raw: string): string | undefined {
   let text = raw.trim();
   if (text.startsWith("/**")) text = text.slice(3);
   else if (text.startsWith("/*!")) text = text.slice(3);
@@ -984,7 +1070,7 @@ function cleanDoxyBlock(raw: string): string | undefined {
   return cleanFirstLine(lines[0]!);
 }
 
-function stripBlockComment(raw: string): string {
+export function stripBlockComment(raw: string): string {
   let text = raw.trim();
   if (text.startsWith("/*")) text = text.slice(2);
   if (text.endsWith("*/")) text = text.slice(0, -2);
@@ -995,17 +1081,17 @@ function stripBlockComment(raw: string): string {
   return lines[0] ?? "";
 }
 
-function stripLineDoxy(raw: string): string {
+export function stripLineDoxy(raw: string): string {
   // `///` or `//!` followed by an optional space.
   return raw.replace(/^\/\/\/+\s?|^\/\/!+\s?/, "").trim();
 }
 
-function cleanFirstLine(s: string): string | undefined {
+export function cleanFirstLine(s: string): string | undefined {
   const trimmed = s.trim();
   if (!trimmed) return undefined;
   return trimmed.length > 300 ? trimmed.slice(0, 297) + "..." : trimmed;
 }
 
-function truncate(s: string, n: number): string {
+export function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n - 3) + "..." : s;
 }
