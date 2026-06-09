@@ -16,6 +16,7 @@ Each plugin extends RepoNova's knowledge graph with support for a specific langu
 | [`@reponova/lang-plantuml`](./packages/lang-plantuml) | PlantUML diagrams (`.puml` / `.plantuml`, regex) | Published |
 | [`@reponova/lang-mermaid`](./packages/lang-mermaid) | Mermaid diagrams (`.mmd` / `.mermaid`, regex) — 13+ diagram families incl. flowchart, sequence, class, state, ER, gantt, journey, gitGraph, pie, mindmap, timeline, C4, requirement, zenuml | Published |
 | [`@reponova/lang-sql`](./packages/lang-sql) | SQL DDL (`.sql` / `.ddl` / `.dml` / `.psql` / `.pgsql` / `.tsql`, regex) — multi-dialect (PostgreSQL, MySQL, SQLite, T-SQL, BigQuery) tables / views / functions / procedures / triggers / indexes / sequences / types + FK & query refs | Published |
+| [`@reponova/lang-java`](./packages/lang-java) | Java (`.java`, tree-sitter) — classes / interfaces / enums / records / annotation interfaces + methods / fields / annotations / extends / implements / method calls | Published |
 | [`@reponova/lang-svg`](./packages/lang-svg) | SVG assets (`.svg`, regex) | Published |
 
 ## Install a plugin in your RepoNova project
@@ -39,6 +40,7 @@ reponova lang add @reponova/lang-json
 reponova lang add @reponova/lang-plantuml
 reponova lang add @reponova/lang-mermaid
 reponova lang add @reponova/lang-sql
+reponova lang add @reponova/lang-java
 reponova lang add @reponova/lang-svg
 ```
 
