@@ -18,6 +18,7 @@ Each plugin extends RepoNova's knowledge graph with support for a specific langu
 | [`@reponova/lang-sql`](./packages/lang-sql) | SQL DDL (`.sql` / `.ddl` / `.dml` / `.psql` / `.pgsql` / `.tsql`, regex) — multi-dialect (PostgreSQL, MySQL, SQLite, T-SQL, BigQuery) tables / views / functions / procedures / triggers / indexes / sequences / types + FK & query refs | Published |
 | [`@reponova/lang-java`](./packages/lang-java) | Java (`.java`, tree-sitter) — classes / interfaces / enums / records / annotation interfaces + methods / fields / annotations / extends / implements / method calls | Published |
 | [`@reponova/lang-c`](./packages/lang-c) | C (`.c` / `.h`, tree-sitter) — functions / structs / unions / enums / typedefs / macros + globals / function-pointer fields / `#include` graph / call refs | Published |
+| [`@reponova/lang-cpp`](./packages/lang-cpp) | C++ (`.cpp` / `.cc` / `.cxx` / `.c++` / `.hpp` / `.hh` / `.hxx` / `.h++`, tree-sitter) — namespaces / classes (access modifiers, inheritance) / templates / ctors / dtors / operator overloads / `using` declarations / alias declarations + the full C subset | Published |
 | [`@reponova/lang-svg`](./packages/lang-svg) | SVG assets (`.svg`, regex) | Published |
 
 ## Install a plugin in your RepoNova project
@@ -43,6 +44,7 @@ reponova lang add @reponova/lang-mermaid
 reponova lang add @reponova/lang-sql
 reponova lang add @reponova/lang-java
 reponova lang add @reponova/lang-c
+reponova lang add @reponova/lang-cpp
 reponova lang add @reponova/lang-svg
 ```
 

@@ -15,6 +15,7 @@ export {
   findFunctionDeclarator,
   hasFunctionDeclarator,
   extractDeclaratorName,
+  extractQualifiedScope,
   collectStorageAndQualifierKeywords,
   simplifyCallee,
   posixBasename,

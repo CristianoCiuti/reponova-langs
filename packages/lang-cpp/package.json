@@ -1,0 +1,84 @@
+{
+  "name": "@reponova/lang-cpp",
+  "version": "0.0.0",
+  "description": "C++ language support for RepoNova",
+  "keywords": [
+    "reponova",
+    "reponova-language",
+    "cpp",
+    "c++",
+    "cplusplus",
+    "tree-sitter",
+    "tree-sitter-cpp",
+    "ast",
+    "code-analysis",
+    "knowledge-graph",
+    "static-analysis",
+    "outline",
+    "symbol-extraction",
+    "include-graph"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "grammars",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "prebuild": "pnpm -w grammar-fetch --package=lang-cpp",
+    "build": "tsup",
+    "pretest": "pnpm -w grammar-fetch --package=lang-cpp",
+    "test": "vitest run",
+    "test:coverage": "pnpm -w grammar-fetch --package=lang-cpp && vitest run --coverage",
+    "size": "size-limit",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "peerDependencies": {
+    "reponova": "^0.6.0"
+  },
+  "devDependencies": {
+    "@reponova/lang-c-core": "workspace:*",
+    "@reponova/lang-test-utils": "workspace:*",
+    "reponova": "^0.6.0",
+    "web-tree-sitter": "^0.25.10"
+  },
+  "reponova": {
+    "type": "language",
+    "id": "cpp",
+    "extensions": [
+      ".cpp",
+      ".cc",
+      ".cxx",
+      ".c++",
+      ".hpp",
+      ".hh",
+      ".hxx",
+      ".h++"
+    ],
+    "grammar": "./grammars/tree-sitter-cpp.wasm"
+  },
+  "size-limit": [
+    {
+      "name": "dist (raw)",
+      "path": "dist/index.js",
+      "limit": "100 KB",
+      "brotli": false,
+      "gzip": false
+    }
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CristianoCiuti/reponova-langs.git",
+    "directory": "packages/lang-cpp"
+  },
+  "homepage": "https://github.com/CristianoCiuti/reponova-langs/tree/main/packages/lang-cpp"
+}

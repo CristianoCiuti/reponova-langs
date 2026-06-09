@@ -902,6 +902,11 @@ export function hasFunctionDeclarator(node: SyntaxNode): boolean {
     const inner = node.childForFieldName("declarator");
     return inner ? hasFunctionDeclarator(inner) : false;
   }
+  if (node.type === "reference_declarator") {
+    // C++-only: `Foo& bar()` — the function declarator is nested inside.
+    const inner = node.namedChildren[0];
+    return inner ? hasFunctionDeclarator(inner) : false;
+  }
   if (node.type === "parenthesized_declarator") {
     const inner = node.namedChildren[0];
     return inner ? hasFunctionDeclarator(inner) : false;
@@ -914,6 +919,16 @@ export function hasFunctionDeclarator(node: SyntaxNode): boolean {
  * `pointer_declarator`, `array_declarator`, `init_declarator`,
  * `function_declarator`, `parenthesized_declarator`, and direct
  * `identifier` / `field_identifier` / `type_identifier`.
+ *
+ * C++-only declarator types are also accepted (transparent to C
+ * parsing because tree-sitter-c never produces them):
+ *   - `reference_declarator` (`Foo& bar`)         → recurse into the first named child
+ *   - `destructor_name`      (`~Foo`)             → keep the literal text including the `~`
+ *   - `operator_name`        (`operator=`)        → keep the literal text including the keyword
+ *   - `qualified_identifier` (`foo::bar`)         → recurse into the `name` field, returning the
+ *                                                   basename (`bar`); the caller is responsible
+ *                                                   for reconstructing the qualifier path via
+ *                                                   `extractQualifiedScope` when needed.
  */
 export function extractDeclaratorName(node: SyntaxNode | null): string | null {
   if (!node) return null;
@@ -922,17 +937,97 @@ export function extractDeclaratorName(node: SyntaxNode | null): string | null {
     case "field_identifier":
     case "type_identifier":
       return node.text;
+    case "destructor_name":
+    case "operator_name":
+      return node.text;
     case "init_declarator":
     case "pointer_declarator":
     case "array_declarator":
     case "function_declarator":
       return extractDeclaratorName(node.childForFieldName("declarator"));
+    case "reference_declarator": {
+      const inner = node.namedChildren[0];
+      return inner ? extractDeclaratorName(inner) : null;
+    }
     case "parenthesized_declarator": {
       const inner = node.namedChildren[0];
       return inner ? extractDeclaratorName(inner) : null;
     }
+    case "qualified_identifier": {
+      // `foo::bar` → `bar`. `extractQualifiedScope` returns `["foo"]`.
+      const nameChild = node.childForFieldName("name");
+      return nameChild ? extractDeclaratorName(nameChild) : null;
+    }
     default:
       return null;
+  }
+}
+
+/**
+ * Walk a (possibly qualified) declarator chain and collect the
+ * `foo::bar::baz` qualifier prefix segments (excluding the basename).
+ * Returns `[]` for unqualified declarators. C++-only — tree-sitter-c
+ * never produces `qualified_identifier`, so callers in pure-C contexts
+ * always get an empty array.
+ *
+ *   `int foo::bar()`              → ["foo"]
+ *   `int foo::bar::baz()`         → ["foo", "bar"]
+ *   `int* foo::bar()`             → ["foo"]  (looks through pointer_declarator etc.)
+ *   `int bar()`                   → []
+ */
+export function extractQualifiedScope(node: SyntaxNode | null): string[] {
+  if (!node) return [];
+  switch (node.type) {
+    case "init_declarator":
+    case "pointer_declarator":
+    case "array_declarator":
+    case "function_declarator":
+      return extractQualifiedScope(node.childForFieldName("declarator"));
+    case "reference_declarator": {
+      const inner = node.namedChildren[0];
+      return inner ? extractQualifiedScope(inner) : [];
+    }
+    case "parenthesized_declarator": {
+      const inner = node.namedChildren[0];
+      return inner ? extractQualifiedScope(inner) : [];
+    }
+    case "qualified_identifier": {
+      // The tree-sitter-cpp AST is right-leaning for qualified ids:
+      //   ns::Cls::method
+      //     scope = ns                         (leftmost)
+      //     name  = qualified_identifier 'Cls::method'
+      //               scope = Cls
+      //               name  = identifier 'method'  (basename — NOT a scope segment)
+      // So the scope chain is `[outer.scope, ...recurse(outer.name)]`,
+      // stopping when `name` is no longer a qualified_identifier.
+      //
+      // C++ also allows the scope to be a `template_type` (e.g.
+      // `Cache<K, V>::put` — the scope is `Cache<K, V>`, a parametric
+      // type). We treat its `name` field as the scope segment so the
+      // qualified path becomes `Cache.put` (the template args are
+      // visible in the function declarator text, not in the qualifier
+      // path).
+      const segments: string[] = [];
+      const scopeChild = node.childForFieldName("scope");
+      if (scopeChild) {
+        if (
+          scopeChild.type === "namespace_identifier" ||
+          scopeChild.type === "type_identifier"
+        ) {
+          segments.push(scopeChild.text);
+        } else if (scopeChild.type === "template_type") {
+          const inner = scopeChild.childForFieldName("name");
+          if (inner) segments.push(inner.text);
+        }
+      }
+      const nameChild = node.childForFieldName("name");
+      if (nameChild && nameChild.type === "qualified_identifier") {
+        segments.push(...extractQualifiedScope(nameChild));
+      }
+      return segments;
+    }
+    default:
+      return [];
   }
 }
 
