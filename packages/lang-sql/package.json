@@ -1,6 +1,6 @@
 {
   "name": "@reponova/lang-sql",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "SQL language support for RepoNova (multi-dialect: PostgreSQL, MySQL, SQLite, T-SQL, BigQuery)",
   "keywords": [
     "reponova",
