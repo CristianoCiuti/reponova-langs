@@ -1,6 +1,6 @@
 {
   "name": "@reponova/lang-cpp",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "C++ language support for RepoNova",
   "keywords": [
     "reponova",
