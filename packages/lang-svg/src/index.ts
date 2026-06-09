@@ -9,7 +9,6 @@ import { SvgExtractor } from "./extractor.js";
 export const plugin: LanguagePlugin = {
   id: "svg",
   fileType: "svg",
-  configDefaults: { parse: true },
   extractor: new SvgExtractor(),
 };
 

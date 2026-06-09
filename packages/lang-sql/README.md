@@ -55,7 +55,6 @@ In `reponova.yml`:
 plugins:
   sql:
     enabled: true       # default: true
-    parse: true         # default: true — parse SQL content to extract symbols
     # patterns: []      # override global patterns for SQL files
     # exclude: []       # override global exclude for SQL files
 ```
@@ -63,7 +62,6 @@ plugins:
 | Property | Type | Default | Description |
 | --- | --- | --- | --- |
 | `enabled` | boolean | `true` | Enable / disable SQL file detection and extraction |
-| `parse` | boolean | `true` | Parse SQL content to extract symbols and relationships |
 | `patterns` | string[] | `[]` | Glob patterns to override global file matching for this plugin |
 | `exclude` | string[] | `[]` | Glob patterns to override global exclusions for this plugin |
 

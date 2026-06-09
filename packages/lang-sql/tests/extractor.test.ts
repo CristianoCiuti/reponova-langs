@@ -19,7 +19,7 @@ describe("LanguagePlugin shape", () => {
   it("exposes the SQL plugin metadata", () => {
     expect(plugin.id).toBe("sql");
     expect(plugin.fileType).toBe("sql");
-    expect(plugin.configDefaults).toEqual({ parse: true });
+    expect(plugin.configDefaults).toBeUndefined();
     expect(plugin.extractor).toBeInstanceOf(SqlExtractor);
   });
 

@@ -9,7 +9,6 @@ import { MermaidExtractor } from "./extractor.js";
 export const plugin: LanguagePlugin = {
   id: "mermaid",
   fileType: "mermaid",
-  configDefaults: { parse: true },
   extractor: new MermaidExtractor(),
 };
 

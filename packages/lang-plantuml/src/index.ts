@@ -9,7 +9,6 @@ import { PlantUmlExtractor } from "./extractor.js";
 export const plugin: LanguagePlugin = {
   id: "plantuml",
   fileType: "plantuml",
-  configDefaults: { parse: true },
   extractor: new PlantUmlExtractor(),
 };
 
